@@ -936,16 +936,18 @@
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 16px;
-                font-size: 14px;
+                font-size: 13px;
                 background: rgba(255, 255, 255, 0.02);
                 border-radius: 8px;
                 overflow: hidden;
             }
 
             .rp-transaction-table th, .rp-transaction-table td {
-                padding: 12px;
+                padding: 10px 8px;
                 text-align: left;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                word-wrap: break-word;
+                max-width: 0;
             }
 
             .rp-transaction-table th {
@@ -953,12 +955,54 @@
                 color: #00d4ff;
                 font-weight: 600;
                 text-transform: uppercase;
-                font-size: 12px;
+                font-size: 11px;
                 letter-spacing: 0.5px;
+                white-space: nowrap;
             }
+
+            .rp-transaction-table td {
+                font-size: 12px;
+            }
+
+            .rp-transaction-table th:nth-child(1) { width: 15%; } /* Date */
+            .rp-transaction-table th:nth-child(2) { width: 12%; } /* Coin */
+            .rp-transaction-table th:nth-child(3) { width: 8%; }  /* Type */
+            .rp-transaction-table th:nth-child(4) { width: 15%; } /* Quantity */
+            .rp-transaction-table th:nth-child(5) { width: 12%; } /* Price */
+            .rp-transaction-table th:nth-child(6) { width: 15%; } /* Total */
+            .rp-transaction-table th:nth-child(7) { width: 23%; } /* Actions */
 
             .rp-transaction-table tr:hover {
                 background: rgba(255, 255, 255, 0.03);
+            }
+
+            .rp-transaction-date {
+                font-size: 11px;
+                color: rgba(255, 255, 255, 0.8);
+            }
+
+            .rp-transaction-coin {
+                font-weight: 600;
+                color: #00d4ff;
+            }
+
+            .rp-transaction-type {
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 11px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                display: inline-block;
+            }
+
+            .rp-transaction-type.buy {
+                background: rgba(0, 255, 136, 0.2);
+                color: #00ff88;
+            }
+
+            .rp-transaction-type.sell {
+                background: rgba(255, 107, 107, 0.2);
+                color: #ff6b6b;
             }
 
             .rp-modal-backdrop {
@@ -1464,6 +1508,51 @@
                 }
             );
         };
+
+        // Direct delete function without confirmation for quick deletion
+        window.deleteTransactionNow = (symbol, txId) => {
+            const button = document.querySelector(`[data-symbol="${symbol}"][data-txid="${txId}"]`);
+            if (button) {
+                button.innerHTML = '⏳ Deleting...';
+                button.disabled = true;
+                button.style.background = 'linear-gradient(135deg, #ffa500, #ff8c00)';
+            }
+
+            try {
+                if (deleteTransaction(symbol, txId)) {
+                    showNotification(`✅ ${symbol} transaction deleted`, 'success');
+                    
+                    // Remove the row immediately for instant feedback
+                    const row = button ? button.closest('tr') : null;
+                    if (row) {
+                        row.style.background = 'rgba(255, 71, 87, 0.2)';
+                        row.style.transition = 'all 0.3s ease';
+                        setTimeout(() => {
+                            row.remove();
+                            // Update the whole tab after visual feedback
+                            setTimeout(() => updateTransactionsTab(), 200);
+                        }, 300);
+                    } else {
+                        updateTransactionsTab();
+                    }
+                } else {
+                    showNotification('❌ Failed to delete transaction', 'error');
+                    if (button) {
+                        button.innerHTML = '🗑️ Delete';
+                        button.disabled = false;
+                        button.style.background = 'linear-gradient(135deg, #ff4757, #ff3742)';
+                    }
+                }
+            } catch (error) {
+                console.error('Error deleting transaction:', error);
+                showNotification('❌ Error deleting transaction', 'error');
+                if (button) {
+                    button.innerHTML = '🗑️ Delete';
+                    button.disabled = false;
+                    button.style.background = 'linear-gradient(135deg, #ff4757, #ff3742)';
+                }
+            }
+        };
     };
 
     const updateSearchTab = () => {
@@ -1864,12 +1953,15 @@
                         <h4 style="margin-bottom: 12px; color: #00d4ff;">➕ Add Transaction</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px;">
                             <input type="number" class="rp-analyzer-input" id="rp-transaction-quantity" 
-                                   placeholder="Quantity (+buy/-sell)" style="margin-bottom: 0;">
+                                   placeholder="Quantity (+buy/-sell)" style="margin-bottom: 0;" step="any">
                             <input type="number" class="rp-analyzer-input" id="rp-transaction-price" 
-                                   placeholder="Price per coin" style="margin-bottom: 0;">
-                            <button class="rp-analyzer-button" onclick="addTransactionToPortfolio()" style="margin-bottom: 0;">
+                                   placeholder="Price per coin" style="margin-bottom: 0;" step="any">
+                            <button class="rp-analyzer-button" id="rp-add-transaction-btn" style="margin-bottom: 0;">
                                 ➕ Add
                             </button>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.6);">
+                            💡 Use positive numbers for buys, negative for sells
                         </div>
                     </div>
                 </div>
@@ -1943,20 +2035,79 @@
                 </div>
             `;
 
-            // Add transaction handler
-            window.addTransactionToPortfolio = () => {
-                const quantity = document.getElementById('rp-transaction-quantity').value;
-                const price = document.getElementById('rp-transaction-price').value;
+            // Add event listener for the transaction button (fixes the button not working)
+            setTimeout(() => {
+                const addButton = document.getElementById('rp-add-transaction-btn');
+                if (addButton) {
+                    addButton.addEventListener('click', () => {
+                        const quantity = document.getElementById('rp-transaction-quantity').value;
+                        const price = document.getElementById('rp-transaction-price').value;
 
-                if (!quantity || !price) {
-                    showNotification('Please enter both quantity and price', 'error');
-                    return;
+                        if (!quantity || !price) {
+                            showNotification('❌ Please enter both quantity and price', 'error');
+                            return;
+                        }
+
+                        if (isNaN(quantity) || isNaN(price)) {
+                            showNotification('❌ Please enter valid numbers', 'error');
+                            return;
+                        }
+
+                        if (parseFloat(price) <= 0) {
+                            showNotification('❌ Price must be greater than 0', 'error');
+                            return;
+                        }
+
+                        try {
+                            addTransaction(symbol, parseFloat(quantity), parseFloat(price));
+                            
+                            // Sofortiges visuelles Feedback
+                            addButton.innerHTML = '✅ Added!';
+                            addButton.style.background = 'linear-gradient(135deg, #00ff88, #00d4aa)';
+                            addButton.disabled = true;
+                            
+                            showNotification(`✅ ${quantity > 0 ? 'Buy' : 'Sell'} transaction added for ${symbol}!`, 'success');
+                            
+                            // Clear the inputs
+                            document.getElementById('rp-transaction-quantity').value = '';
+                            document.getElementById('rp-transaction-price').value = '';
+                            
+                            // Reset button after 2 seconds and refresh
+                            setTimeout(() => {
+                                addButton.innerHTML = '➕ Add';
+                                addButton.style.background = 'linear-gradient(135deg, #00d4ff, #0096ff)';
+                                addButton.disabled = false;
+                                
+                                // Refresh the analysis tab
+                                loadCoinData(symbol);
+                            }, 2000);
+                            
+                        } catch (error) {
+                            console.error('Error adding transaction:', error);
+                            showNotification('❌ Error adding transaction', 'error');
+                        }
+                    });
                 }
 
-                addTransaction(symbol, quantity, price);
-                showNotification('Transaction added successfully', 'success');
-                setTimeout(() => updateAnalysisTab(), 500);
-            };
+                // Also add Enter key support for inputs
+                const quantityInput = document.getElementById('rp-transaction-quantity');
+                const priceInput = document.getElementById('rp-transaction-price');
+                
+                if (quantityInput && priceInput) {
+                    [quantityInput, priceInput].forEach(input => {
+                        input.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter') {
+                                document.getElementById('rp-add-transaction-btn').click();
+                            }
+                        });
+                    });
+                }
+            }, 100);
+
+            // Remove the old global function since we're using event listeners now
+            if (window.addTransactionToPortfolio) {
+                delete window.addTransactionToPortfolio;
+            }
 
         } catch (error) {
             console.error('Error loading coin data:', error);
