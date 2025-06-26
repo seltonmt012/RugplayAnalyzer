@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         RugPlay Market Analyzer - Enhanced
+// @name         RugPlay Market Analyzer - Enhanced v2.0
 // @namespace    http://tampermonkey.net/
-// @version      1.3
-// @description  Advanced market analysis tool for RugPlay with portfolio tracking and rugpull detection
+// @version      2.0
+// @description  Advanced market analysis tool for RugPlay with modern UI, comprehensive analysis and enhanced security metrics
 // @author       seltonmt012
 // @match        https://rugplay.com/*
 // @grant        GM_setValue
@@ -19,140 +19,57 @@
     // Configuration & Storage
     // ===========================
 
-    // Get API key from storage
-    const getApiKey = () => {
-        return GM_getValue('rugplay_api_key', '');
-    };
-
-    const saveApiKey = (key) => {
-        GM_setValue('rugplay_api_key', key);
-    };
-
-    // API base URL
+    const getApiKey = () => GM_getValue('rugplay_api_key', '');
+    const saveApiKey = (key) => GM_setValue('rugplay_api_key', key);
     const API_BASE_URL = 'https://rugplay.com/api/v1';
 
-    // Portfolio storage structure
-    const getPortfolio = () => {
-        return GM_getValue('rugplay_portfolio', {});
+    const getPortfolio = () => GM_getValue('rugplay_portfolio', {});
+    const savePortfolio = (portfolio) => {
+        try {
+            console.log('Saving portfolio data:', portfolio);
+            GM_setValue('rugplay_portfolio', portfolio);
+            console.log('Portfolio saved successfully');
+        } catch (error) {
+            console.error('Error saving portfolio:', error);
+            showNotification('Error saving data: ' + error.message, 'error');
+        }
     };
-
-    // FIX: Changed GM_getValue to GM_setValue to properly save the portfolio
-const savePortfolio = (portfolio) => {
-    try {
-        console.log('Saving portfolio data:', portfolio);
-        GM_setValue('rugplay_portfolio', portfolio);
-        console.log('Portfolio saved successfully');
-    } catch (error) {
-        console.error('Error saving portfolio:', error);
-        showNotification('Error saving data: ' + error.message, 'error');
-    }
-};
 
     const addTransaction = (symbol, quantity, price, date = new Date()) => {
         const portfolio = getPortfolio();
-
         if (!portfolio[symbol]) {
-            portfolio[symbol] = {
-                transactions: [],
-                notes: ''
-            };
+            portfolio[symbol] = { transactions: [], notes: '' };
         }
-
         portfolio[symbol].transactions.push({
-            id: Date.now() + Math.random().toString(36).substring(2, 9), // Generate unique ID
+            id: Date.now() + Math.random().toString(36).substring(2, 9),
             quantity: parseFloat(quantity),
             price: parseFloat(price),
             date: date.toISOString(),
             type: quantity > 0 ? 'buy' : 'sell'
         });
-
         savePortfolio(portfolio);
         updateUI();
     };
 
-// Fix for the delete transaction function
-const deleteTransaction = (symbol, transactionId) => {
-    try {
-        console.log(`Deleting transaction: ${symbol} - ${transactionId}`);
-        const portfolio = getPortfolio();
+    const deleteTransaction = (symbol, transactionId) => {
+        try {
+            const portfolio = getPortfolio();
+            if (!portfolio[symbol] || !portfolio[symbol].transactions) return false;
 
-        if (!portfolio[symbol] || !portfolio[symbol].transactions) {
-            console.error(`No transactions found for ${symbol}`);
-            showNotification(`No transactions found for ${symbol}`, 'error');
+            const transactionIndex = portfolio[symbol].transactions.findIndex(tx => tx.id === transactionId);
+            if (transactionIndex === -1) return false;
+
+            portfolio[symbol].transactions.splice(transactionIndex, 1);
+            if (portfolio[symbol].transactions.length === 0) {
+                delete portfolio[symbol];
+            }
+            savePortfolio(portfolio);
+            return true;
+        } catch (error) {
+            console.error('Error deleting transaction:', error);
             return false;
         }
-
-        const transactionIndex = portfolio[symbol].transactions.findIndex(tx => tx.id === transactionId);
-
-        if (transactionIndex === -1) {
-            console.error(`Transaction not found: ${transactionId}`);
-            showNotification('Transaction not found', 'error');
-            return false;
-        }
-
-        // Log before deletion
-        console.log(`Found transaction at index ${transactionIndex}, deleting...`);
-
-        // Remove the transaction
-        portfolio[symbol].transactions.splice(transactionIndex, 1);
-
-        // If there are no more transactions for this symbol, remove the coin entry
-        if (portfolio[symbol].transactions.length === 0) {
-            console.log(`No more transactions for ${symbol}, removing coin entry`);
-            delete portfolio[symbol];
-        }
-
-        // Save the updated portfolio
-        savePortfolio(portfolio);
-
-        console.log('Transaction deleted successfully');
-        return true;
-    } catch (error) {
-        console.error('Error deleting transaction:', error);
-        showNotification('Error deleting transaction: ' + error.message, 'error');
-        return false;
-    }
-};
-
-    // Fix for transaction tab button event handlers
-const setupTransactionTabEventListeners = () => {
-    // Add event listeners for delete buttons
-    document.querySelectorAll('[data-action="delete-tx"]').forEach(button => {
-        button.addEventListener('click', () => {
-            const symbol = button.dataset.symbol;
-            const txId = button.dataset.txid;
-
-            console.log(`Delete button clicked for transaction: ${symbol} - ${txId}`);
-
-            showConfirmModal(
-                'Delete Transaction',
-                `Are you sure you want to delete this ${symbol} transaction? This action cannot be undone.`,
-                () => {
-                    const success = deleteTransaction(symbol, txId);
-                    if (success) {
-                        showNotification('Transaction deleted successfully', 'success');
-                        updateTransactionsTab(); // Refresh the UI
-                    } else {
-                        showNotification('Failed to delete transaction', 'error');
-                    }
-                }
-            );
-        });
-    });
-
-    // Add event listeners for import/export buttons
-    const exportButton = document.getElementById('rp-export-transactions');
-    if (exportButton) {
-        exportButton.addEventListener('click', exportTransactions);
-    }
-
-    const importButton = document.getElementById('rp-import-transactions');
-    if (importButton) {
-        importButton.addEventListener('click', () => showImportModal());
-    }
-};
-
-    // Rest of the script remains unchanged...
+    };
 
     const calculateHoldings = (symbol) => {
         const portfolio = getPortfolio();
@@ -180,88 +97,11 @@ const setupTransactionTabEventListeners = () => {
 
     // ===========================
     // API Functions
-// Fix for the confirmation modal that's causing the error
-const showConfirmModal = (title, message, onConfirm) => {
-    try {
-        // Remove any existing modals first
-        const existingModal = document.getElementById('rp-confirm-modal');
-        if (existingModal) {
-            existingModal.remove();
-        }
+    // ===========================
 
-        // Create the modal directly with DOM methods instead of innerHTML
-        const modalBackdrop = document.createElement('div');
-        modalBackdrop.className = 'rp-modal-backdrop';
-        modalBackdrop.id = 'rp-confirm-modal';
-
-        const modalDiv = document.createElement('div');
-        modalDiv.className = 'rp-modal';
-
-        const modalTitle = document.createElement('div');
-        modalTitle.className = 'rp-modal-title';
-        modalTitle.textContent = title;
-
-        const modalContent = document.createElement('div');
-        modalContent.className = 'rp-modal-content';
-
-        const modalMessage = document.createElement('p');
-        modalMessage.textContent = message;
-
-        const modalActions = document.createElement('div');
-        modalActions.className = 'rp-modal-actions';
-
-        const cancelButton = document.createElement('button');
-        cancelButton.className = 'rp-analyzer-button';
-        cancelButton.id = 'rp-confirm-cancel';
-        cancelButton.style.backgroundColor = '#555';
-        cancelButton.textContent = 'Cancel';
-
-        const confirmButton = document.createElement('button');
-        confirmButton.className = 'rp-analyzer-button';
-        confirmButton.id = 'rp-confirm-ok';
-        confirmButton.style.backgroundColor = '#f55';
-        confirmButton.textContent = 'Confirm';
-
-        // Build the modal structure
-        modalContent.appendChild(modalMessage);
-        modalActions.appendChild(cancelButton);
-        modalActions.appendChild(confirmButton);
-
-        modalDiv.appendChild(modalTitle);
-        modalDiv.appendChild(modalContent);
-        modalDiv.appendChild(modalActions);
-
-        modalBackdrop.appendChild(modalDiv);
-
-        // Add the modal to the document
-        document.body.appendChild(modalBackdrop);
-
-        // Attach event listeners after the element is in the DOM
-        cancelButton.addEventListener('click', () => {
-            modalBackdrop.remove();
-            showNotification('Action cancelled', 'warning');
-        });
-
-        confirmButton.addEventListener('click', () => {
-            try {
-                onConfirm();
-                modalBackdrop.remove();
-            } catch (error) {
-                console.error('Error in confirmation action:', error);
-                showNotification('Error: ' + error.message, 'error');
-                modalBackdrop.remove();
-            }
-        });
-    } catch (error) {
-        console.error('Error showing modal:', error);
-        showNotification('Error showing confirmation dialog: ' + error.message, 'error');
-    }
-};
     const fetchCoinData = async (symbol) => {
         const apiKey = getApiKey();
-        if (!apiKey) {
-            throw new Error('API key not set. Please configure your API key in settings.');
-        }
+        if (!apiKey) throw new Error('API key not set');
 
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
@@ -274,29 +114,23 @@ const showConfirmModal = (title, message, onConfirm) => {
                 onload: (response) => {
                     if (response.status === 200) {
                         resolve(JSON.parse(response.responseText));
-                    } else if (response.status === 401) {
-                        reject('Invalid API key. Please check your API key in settings.');
                     } else {
-                        reject(`Error fetching coin data: ${response.statusText}`);
+                        reject(`Error: ${response.statusText}`);
                     }
                 },
-                onerror: (error) => {
-                    reject(`Network error: ${error}`);
-                }
+                onerror: (error) => reject(`Network error: ${error}`)
             });
         });
     };
 
     const fetchCoinHolders = async (symbol) => {
         const apiKey = getApiKey();
-        if (!apiKey) {
-            throw new Error('API key not set. Please configure your API key in settings.');
-        }
+        if (!apiKey) throw new Error('API key not set');
 
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: `${API_BASE_URL}/holders/${symbol}?limit=50`,
+                url: `${API_BASE_URL}/holders/${symbol}?limit=100`,
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json'
@@ -304,24 +138,18 @@ const showConfirmModal = (title, message, onConfirm) => {
                 onload: (response) => {
                     if (response.status === 200) {
                         resolve(JSON.parse(response.responseText));
-                    } else if (response.status === 401) {
-                        reject('Invalid API key. Please check your API key in settings.');
                     } else {
-                        reject(`Error fetching holder data: ${response.statusText}`);
+                        reject(`Error: ${response.statusText}`);
                     }
                 },
-                onerror: (error) => {
-                    reject(`Network error: ${error}`);
-                }
+                onerror: (error) => reject(`Network error: ${error}`)
             });
         });
     };
 
     const searchCoins = async (searchTerm) => {
         const apiKey = getApiKey();
-        if (!apiKey) {
-            throw new Error('API key not set. Please configure your API key in settings.');
-        }
+        if (!apiKey) throw new Error('API key not set');
 
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
@@ -334,91 +162,17 @@ const showConfirmModal = (title, message, onConfirm) => {
                 onload: (response) => {
                     if (response.status === 200) {
                         resolve(JSON.parse(response.responseText));
-                    } else if (response.status === 401) {
-                        reject('Invalid API key. Please check your API key in settings.');
                     } else {
-                        reject(`Error searching coins: ${response.statusText}`);
+                        reject(`Error: ${response.statusText}`);
                     }
                 },
-                onerror: (error) => {
-                    reject(`Network error: ${error}`);
-                }
+                onerror: (error) => reject(`Network error: ${error}`)
             });
         });
     };
-    // Fix for the settings tab button event handlers
-const setupSettingsTabEventListeners = () => {
-    const saveApiKeyButton = document.getElementById('rp-save-api-key');
-    if (saveApiKeyButton) {
-        saveApiKeyButton.addEventListener('click', () => {
-            const key = document.getElementById('rp-api-key').value.trim();
-            if (!key) {
-                showNotification('API key cannot be empty', 'error');
-                return;
-            }
-
-            saveApiKey(key);
-            showNotification('API key saved successfully', 'success');
-
-            // Switch to coin tab
-            document.querySelector('[data-tab="coin"]').click();
-        });
-    }
-
-    const toggleKeyVisibilityButton = document.getElementById('rp-toggle-key-visibility');
-    if (toggleKeyVisibilityButton) {
-        toggleKeyVisibilityButton.addEventListener('click', () => {
-            const input = document.getElementById('rp-api-key');
-            if (input.type === 'password') {
-                input.type = 'text';
-                toggleKeyVisibilityButton.textContent = '🔒';
-            } else {
-                input.type = 'password';
-                toggleKeyVisibilityButton.textContent = '👁️';
-            }
-        });
-    }
-
-    const exportPortfolioButton = document.getElementById('rp-export-portfolio');
-    if (exportPortfolioButton) {
-        exportPortfolioButton.addEventListener('click', exportTransactions);
-    }
-
-    const importPortfolioButton = document.getElementById('rp-import-portfolio');
-    if (importPortfolioButton) {
-        importPortfolioButton.addEventListener('click', () => {
-            showImportModal();
-        });
-    }
-
-    const clearPortfolioButton = document.getElementById('rp-clear-portfolio');
-    if (clearPortfolioButton) {
-        clearPortfolioButton.addEventListener('click', () => {
-            showConfirmModal(
-                'Clear Portfolio Data',
-                'Are you sure you want to clear all portfolio data? This will delete all your transactions and cannot be undone.',
-                () => {
-                    try {
-                        console.log('Clearing portfolio data...');
-                        savePortfolio({});
-                        showNotification('Portfolio data cleared successfully', 'success');
-
-                        // Update the UI to reflect the cleared portfolio
-                        if (document.querySelector('[data-tab="portfolio"]').classList.contains('active')) {
-                            updatePortfolioTab();
-                        }
-                    } catch (error) {
-                        console.error('Error clearing portfolio:', error);
-                        showNotification('Error clearing portfolio: ' + error.message, 'error');
-                    }
-                }
-            );
-        });
-    }
-};
 
     // ===========================
-    // Analysis Functions
+    // Enhanced Analysis Functions
     // ===========================
 
     const analyzePrice = (candlesticks) => {
@@ -426,634 +180,785 @@ const setupSettingsTabEventListeners = () => {
             return {
                 trend: 'UNKNOWN',
                 trendPercentage: 0,
-                message: 'Insufficient data for analysis'
+                message: 'Insufficient data',
+                confidence: 0
             };
         }
 
-        // Get the last 10 candles
-        const recentCandles = candlesticks.slice(-10);
-
-        // Calculate the percentage change
+        const recentCandles = candlesticks.slice(-20);
         const firstPrice = recentCandles[0].open;
         const lastPrice = recentCandles[recentCandles.length - 1].close;
         const changePercentage = ((lastPrice - firstPrice) / firstPrice) * 100;
 
-        // Count up candles
-        const upCandles = recentCandles.filter(candle => candle.close > candle.open).length;
+        // Calculate volatility
+        const prices = recentCandles.map(c => c.close);
+        const avgPrice = prices.reduce((a, b) => a + b) / prices.length;
+        const volatility = Math.sqrt(prices.reduce((sum, price) => sum + Math.pow(price - avgPrice, 2), 0) / prices.length);
+        const volatilityPercent = (volatility / avgPrice) * 100;
 
-        let trend, message;
+        // Calculate momentum
+        const shortMA = prices.slice(-5).reduce((a, b) => a + b) / 5;
+        const longMA = prices.slice(-10).reduce((a, b) => a + b) / 10;
+        const momentum = ((shortMA - longMA) / longMA) * 100;
+
+        let trend, message, confidence;
 
         if (changePercentage > 50) {
+            trend = 'STRONG_UP';
+            message = `🚀 Strong bullish trend (+${changePercentage.toFixed(1)}%)`;
+            confidence = Math.min(95, 70 + Math.abs(changePercentage) / 2);
+        } else if (changePercentage > 20) {
             trend = 'UP';
-            message = 'Uptrend, last 10 candles up ' + formatNumber(Math.abs(changePercentage)) + '%';
-        } else if (changePercentage < -20) {
+            message = `📈 Bullish trend (+${changePercentage.toFixed(1)}%)`;
+            confidence = Math.min(85, 60 + Math.abs(changePercentage));
+        } else if (changePercentage < -30) {
+            trend = 'STRONG_DOWN';
+            message = `📉 Strong bearish trend (${changePercentage.toFixed(1)}%)`;
+            confidence = Math.min(90, 65 + Math.abs(changePercentage) / 2);
+        } else if (changePercentage < -10) {
             trend = 'DOWN';
-            message = 'Downtrend, last 10 candles down ' + formatNumber(Math.abs(changePercentage)) + '%';
-        } else if (upCandles >= 7) {
-            trend = 'BULLISH';
-            message = 'Bullish pattern, ' + upCandles + '/10 recent candles are up';
-        } else if (upCandles <= 3) {
-            trend = 'BEARISH';
-            message = 'Bearish pattern, only ' + upCandles + '/10 recent candles are up';
+            message = `⬇️ Bearish trend (${changePercentage.toFixed(1)}%)`;
+            confidence = Math.min(80, 55 + Math.abs(changePercentage));
         } else {
             trend = 'NEUTRAL';
-            message = 'Sideways movement, no clear trend';
+            message = `↔️ Sideways movement (${changePercentage.toFixed(1)}%)`;
+            confidence = 50;
         }
 
         return {
             trend,
             trendPercentage: changePercentage,
-            message
+            message,
+            confidence,
+            volatility: volatilityPercent,
+            momentum
         };
     };
 
-    const analyzeRisk = (coinData, holdersData) => {
+    const analyzeSecurity = (coinData, holdersData) => {
         if (!holdersData || !holdersData.holders || !coinData) {
             return {
-                riskLevel: 'UNKNOWN',
-                riskScore: 0,
+                securityScore: 0,
+                level: 'UNKNOWN',
                 factors: [],
-                message: 'Insufficient data for risk analysis'
+                recommendation: 'Insufficient data'
             };
         }
 
+        let securityScore = 100;
         const factors = [];
-        let riskScore = 0;
 
-        // Check holder concentration
+        // Holder concentration analysis
         const topHolder = holdersData.holders[0];
         const topHolderPercentage = topHolder ? topHolder.percentage : 0;
 
         if (topHolderPercentage > 80) {
+            securityScore -= 40;
             factors.push({
-                factor: `Top holder owns ${topHolderPercentage.toFixed(2)}%`,
-                score: 8,
-                description: 'Extremely high concentration'
+                type: 'critical',
+                message: `🚨 Extreme concentration: Top holder owns ${topHolderPercentage.toFixed(2)}%`,
+                impact: -40
             });
-            riskScore += 8;
         } else if (topHolderPercentage > 50) {
+            securityScore -= 25;
             factors.push({
-                factor: `Top holder owns ${topHolderPercentage.toFixed(2)}%`,
-                score: 5,
-                description: 'High concentration'
+                type: 'high',
+                message: `⚠️ High concentration: Top holder owns ${topHolderPercentage.toFixed(2)}%`,
+                impact: -25
             });
-            riskScore += 5;
         } else if (topHolderPercentage > 30) {
+            securityScore -= 15;
             factors.push({
-                factor: `Top holder owns ${topHolderPercentage.toFixed(2)}%`,
-                score: 3,
-                description: 'Moderate concentration'
+                type: 'medium',
+                message: `⚠️ Moderate concentration: Top holder owns ${topHolderPercentage.toFixed(2)}%`,
+                impact: -15
             });
-            riskScore += 3;
         }
 
-        // Check top 5 holders concentration
-        const top5Holders = holdersData.holders.slice(0, 5);
-        const top5Percentage = top5Holders.reduce((sum, holder) => sum + holder.percentage, 0);
+        // Top 10 holders analysis
+        const top10Holders = holdersData.holders.slice(0, 10);
+        const top10Percentage = top10Holders.reduce((sum, holder) => sum + holder.percentage, 0);
 
-        if (top5Percentage > 95) {
+        if (top10Percentage > 95) {
+            securityScore -= 30;
             factors.push({
-                factor: `Top 5 holders own ${top5Percentage.toFixed(2)}%`,
-                score: 8,
-                description: 'Extremely high concentration'
+                type: 'critical',
+                message: `🚨 Top 10 holders control ${top10Percentage.toFixed(2)}%`,
+                impact: -30
             });
-            riskScore += 8;
-        } else if (top5Percentage > 80) {
+        } else if (top10Percentage > 80) {
+            securityScore -= 20;
             factors.push({
-                factor: `Top 5 holders own ${top5Percentage.toFixed(2)}%`,
-                score: 5,
-                description: 'High concentration'
+                type: 'high',
+                message: `⚠️ Top 10 holders control ${top10Percentage.toFixed(2)}%`,
+                impact: -20
             });
-            riskScore += 5;
-        } else if (top5Percentage > 60) {
-            factors.push({
-                factor: `Top 5 holders own ${top5Percentage.toFixed(2)}%`,
-                score: 3,
-                description: 'Moderate concentration'
-            });
-            riskScore += 3;
         }
 
-        // Check pool health
+        // Liquidity analysis
         const poolPercentage = (holdersData.poolInfo.coinAmount / holdersData.circulatingSupply) * 100;
-
         if (poolPercentage < 1) {
+            securityScore -= 25;
             factors.push({
-                factor: `Pool is low (${poolPercentage.toFixed(3)}% of supply)`,
-                score: 4,
-                description: 'Very low liquidity'
+                type: 'critical',
+                message: `🚨 Very low liquidity: ${poolPercentage.toFixed(3)}% in pool`,
+                impact: -25
             });
-            riskScore += 4;
         } else if (poolPercentage < 5) {
+            securityScore -= 15;
             factors.push({
-                factor: `Pool is moderate (${poolPercentage.toFixed(2)}% of supply)`,
-                score: 2,
-                description: 'Low liquidity'
+                type: 'medium',
+                message: `⚠️ Low liquidity: ${poolPercentage.toFixed(2)}% in pool`,
+                impact: -15
             });
-            riskScore += 2;
         }
 
-        // Check price volatility
-        const priceChange24h = coinData.coin.change24h;
-        const currentPrice = coinData.coin.currentPrice;
-        const changePercentage = (priceChange24h / (currentPrice - priceChange24h)) * 100;
-
-        if (Math.abs(changePercentage) > 100) {
-            factors.push({
-                factor: `Major price movement detected`,
-                score: 2,
-                description: 'Extreme volatility'
-            });
-            riskScore += 2;
-        } else if (Math.abs(changePercentage) > 50) {
-            factors.push({
-                factor: `Significant price volatility`,
-                score: 1,
-                description: 'High volatility'
-            });
-            riskScore += 1;
-        }
-
-        // Age of the coin
+        // Age analysis
         const creationDate = new Date(coinData.coin.createdAt);
-        const now = new Date();
-        const ageInDays = (now - creationDate) / (1000 * 60 * 60 * 24);
+        const ageInDays = (new Date() - creationDate) / (1000 * 60 * 60 * 24);
 
         if (ageInDays < 1) {
+            securityScore -= 20;
             factors.push({
-                factor: `New coin (less than 1 day old)`,
-                score: 3,
-                description: 'Very new project'
+                type: 'high',
+                message: `🕐 Very new project (${ageInDays.toFixed(1)} days old)`,
+                impact: -20
             });
-            riskScore += 3;
         } else if (ageInDays < 7) {
+            securityScore -= 10;
             factors.push({
-                factor: `Recent coin (less than 1 week old)`,
-                score: 1,
-                description: 'New project'
+                type: 'medium',
+                message: `🕐 New project (${ageInDays.toFixed(1)} days old)`,
+                impact: -10
             });
-            riskScore += 1;
+        } else if (ageInDays > 30) {
+            securityScore += 5;
+            factors.push({
+                type: 'positive',
+                message: `✅ Established project (${ageInDays.toFixed(0)} days old)`,
+                impact: +5
+            });
         }
 
-        // Determine risk level
-        let riskLevel, recommendation;
+        // Volume analysis
+        const volumeToMarketCap = (coinData.coin.volume24h / coinData.coin.marketCap) * 100;
+        if (volumeToMarketCap > 50) {
+            securityScore -= 10;
+            factors.push({
+                type: 'medium',
+                message: `⚠️ Extremely high volume ratio: ${volumeToMarketCap.toFixed(2)}%`,
+                impact: -10
+            });
+        } else if (volumeToMarketCap > 20) {
+            securityScore -= 5;
+            factors.push({
+                type: 'low',
+                message: `⚠️ High volume ratio: ${volumeToMarketCap.toFixed(2)}%`,
+                impact: -5
+            });
+        }
 
-        if (riskScore >= 12) {
-            riskLevel = 'HIGH';
-            recommendation = '⛔ HIGH RISK - Exercise extreme caution';
-        } else if (riskScore >= 7) {
-            riskLevel = 'MEDIUM';
-            recommendation = '⚠️ MEDIUM RISK - Proceed with caution';
-        } else if (riskScore >= 3) {
-            riskLevel = 'LOW';
-            recommendation = '🔶 LOW RISK - Standard precautions advised';
+        securityScore = Math.max(0, Math.min(100, securityScore));
+
+        let level, recommendation;
+        if (securityScore >= 80) {
+            level = 'HIGH';
+            recommendation = '✅ Low risk - Appears relatively safe';
+        } else if (securityScore >= 60) {
+            level = 'MEDIUM';
+            recommendation = '⚠️ Medium risk - Exercise caution';
+        } else if (securityScore >= 40) {
+            level = 'LOW';
+            recommendation = '🔶 High risk - Be very careful';
         } else {
-            riskLevel = 'MINIMAL';
-            recommendation = '✅ MINIMAL RISK - Appears relatively safe';
+            level = 'CRITICAL';
+            recommendation = '🚨 Critical risk - Avoid or minimal exposure';
         }
 
         return {
-            riskLevel,
-            riskScore,
+            securityScore,
+            level,
             factors,
             recommendation,
             holderAnalysis: {
                 topHolder: topHolderPercentage,
-                top5Holders: top5Percentage,
-                poolPercentage
+                top10Holders: top10Percentage,
+                poolPercentage,
+                totalHolders: holdersData.holders.length
             }
         };
     };
 
+    const analyzeActivity = (coinData, holdersData) => {
+        const coin = coinData.coin;
+        let activityScore = 0;
+        const factors = [];
+
+        // Volume activity
+        const volumeScore = Math.min(30, (coin.volume24h / 10000) * 10);
+        activityScore += volumeScore;
+        factors.push({
+            metric: 'Trading Volume',
+            value: `$${formatNumber(coin.volume24h)}`,
+            score: volumeScore,
+            maxScore: 30
+        });
+
+        // Market cap activity
+        const mcapScore = Math.min(25, (coin.marketCap / 100000) * 5);
+        activityScore += mcapScore;
+        factors.push({
+            metric: 'Market Cap',
+            value: `$${formatNumber(coin.marketCap)}`,
+            score: mcapScore,
+            maxScore: 25
+        });
+
+        // Holder count activity
+        const holderScore = Math.min(25, (holdersData.holders.length / 10) * 2);
+        activityScore += holderScore;
+        factors.push({
+            metric: 'Holder Count',
+            value: holdersData.holders.length.toString(),
+            score: holderScore,
+            maxScore: 25
+        });
+
+        // Price volatility as activity indicator
+        const priceChange = Math.abs((coin.change24h / (coin.currentPrice - coin.change24h)) * 100);
+        const volatilityScore = Math.min(20, priceChange / 2);
+        activityScore += volatilityScore;
+        factors.push({
+            metric: 'Price Volatility',
+            value: `${priceChange.toFixed(2)}%`,
+            score: volatilityScore,
+            maxScore: 20
+        });
+
+        activityScore = Math.min(100, activityScore);
+
+        let level;
+        if (activityScore >= 80) level = 'VERY_HIGH';
+        else if (activityScore >= 60) level = 'HIGH';
+        else if (activityScore >= 40) level = 'MEDIUM';
+        else if (activityScore >= 20) level = 'LOW';
+        else level = 'VERY_LOW';
+
+        return {
+            activityScore,
+            level,
+            factors
+        };
+    };
+
+    const analyzeProfitability = (coinData, holdings) => {
+        const coin = coinData.coin;
+        let profitScore = 50; // Start neutral
+        const factors = [];
+
+        // Price performance
+        const priceChange = (coin.change24h / (coin.currentPrice - coin.change24h)) * 100;
+        const performanceScore = Math.min(25, Math.max(-25, priceChange));
+        profitScore += performanceScore;
+        factors.push({
+            metric: '24h Performance',
+            value: `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`,
+            score: performanceScore,
+            impact: performanceScore >= 0 ? 'positive' : 'negative'
+        });
+
+        // Volume/Market Cap ratio (liquidity premium)
+        const volumeRatio = (coin.volume24h / coin.marketCap) * 100;
+        const liquidityScore = Math.min(15, volumeRatio * 2) - 10;
+        profitScore += liquidityScore;
+        factors.push({
+            metric: 'Liquidity Ratio',
+            value: `${volumeRatio.toFixed(2)}%`,
+            score: liquidityScore,
+            impact: liquidityScore >= 0 ? 'positive' : 'negative'
+        });
+
+        // Personal holdings performance
+        if (holdings.quantity > 0) {
+            const currentValue = holdings.quantity * coin.currentPrice;
+            const costBasis = holdings.quantity * holdings.avgPrice;
+            const personalReturn = ((currentValue - costBasis) / costBasis) * 100;
+            const personalScore = Math.min(25, Math.max(-25, personalReturn));
+            profitScore += personalScore;
+            factors.push({
+                metric: 'Your P&L',
+                value: `${personalReturn >= 0 ? '+' : ''}${personalReturn.toFixed(2)}%`,
+                score: personalScore,
+                impact: personalScore >= 0 ? 'positive' : 'negative'
+            });
+        }
+
+        // Market cap potential
+        const mcapScore = coin.marketCap < 100000 ? 10 : coin.marketCap < 1000000 ? 5 : 0;
+        profitScore += mcapScore;
+        if (mcapScore > 0) {
+            factors.push({
+                metric: 'Growth Potential',
+                value: 'Small Cap',
+                score: mcapScore,
+                impact: 'positive'
+            });
+        }
+
+        profitScore = Math.max(0, Math.min(100, profitScore));
+
+        let level;
+        if (profitScore >= 80) level = 'EXCELLENT';
+        else if (profitScore >= 65) level = 'GOOD';
+        else if (profitScore >= 50) level = 'NEUTRAL';
+        else if (profitScore >= 35) level = 'POOR';
+        else level = 'VERY_POOR';
+
+        return {
+            profitScore,
+            level,
+            factors
+        };
+    };
+
     // ===========================
-    // UI Components
+    // Modern UI Styles
     // ===========================
 
-    // Add CSS styles
     const addStyles = () => {
         GM_addStyle(`
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+            
             .rp-analyzer {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                width: 600px;
-                max-height: 85vh;
+                width: 650px;
+                max-height: 90vh;
                 overflow-y: auto;
-                background-color: #1a1a1a;
-                color: #eee;
-                border-radius: 10px;
-                box-shadow: 0 0 20px rgba(0,0,0,0.7);
-                font-family: 'Arial', sans-serif;
+                background: rgba(15, 15, 15, 0.95);
+                backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+                color: #ffffff;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
                 z-index: 10000;
-                padding: 15px;
+                padding: 0;
                 scrollbar-width: thin;
-                scrollbar-color: #444 #222;
+                scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
             }
 
             .rp-analyzer::-webkit-scrollbar {
-                width: 8px;
+                width: 6px;
             }
 
             .rp-analyzer::-webkit-scrollbar-track {
-                background: #222;
+                background: transparent;
             }
 
             .rp-analyzer::-webkit-scrollbar-thumb {
-                background-color: #444;
-                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 3px;
             }
 
-            .rp-analyzer * {
-                box-sizing: border-box;
+            .rp-analyzer::-webkit-scrollbar-thumb:hover {
+                background: rgba(255, 255, 255, 0.3);
             }
 
             .rp-analyzer-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 15px;
-                border-bottom: 1px solid #444;
-                padding-bottom: 10px;
+                padding: 20px 24px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.02);
+                border-radius: 16px 16px 0 0;
             }
 
             .rp-analyzer-title {
                 font-size: 18px;
-                font-weight: bold;
-                color: #0df;
+                font-weight: 600;
+                color: #00d4ff;
+                display: flex;
+                align-items: center;
+                gap: 8px;
             }
 
             .rp-analyzer-close {
                 cursor: pointer;
-                color: #aaa;
-                font-size: 20px;
+                color: rgba(255, 255, 255, 0.6);
+                font-size: 24px;
+                line-height: 1;
+                padding: 4px;
+                border-radius: 6px;
+                transition: all 0.2s ease;
             }
 
             .rp-analyzer-close:hover {
-                color: #fff;
+                color: #ff4757;
+                background: rgba(255, 71, 87, 0.1);
             }
 
             .rp-analyzer-tabs {
                 display: flex;
-                border-bottom: 1px solid #444;
-                margin-bottom: 15px;
+                padding: 0 24px;
+                background: rgba(255, 255, 255, 0.02);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                gap: 4px;
             }
 
             .rp-analyzer-tab {
-                padding: 8px 15px;
+                padding: 12px 16px;
                 cursor: pointer;
-                margin-right: 5px;
                 font-size: 14px;
-                border-radius: 5px 5px 0 0;
-                background-color: #333;
+                font-weight: 500;
+                border-radius: 8px 8px 0 0;
+                background: transparent;
+                color: rgba(255, 255, 255, 0.7);
                 transition: all 0.2s ease;
+                position: relative;
+                display: flex;
+                align-items: center;
+                gap: 6px;
             }
 
             .rp-analyzer-tab:hover {
-                background-color: #3a3a3a;
+                color: #ffffff;
+                background: rgba(255, 255, 255, 0.05);
             }
 
             .rp-analyzer-tab.active {
-                background-color: #0df;
-                color: #111;
-                font-weight: bold;
+                background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 150, 255, 0.1));
+                color: #00d4ff;
+                border-bottom: 2px solid #00d4ff;
             }
 
             .rp-analyzer-content {
-                background-color: #222;
-                border-radius: 5px;
-                padding: 15px;
+                padding: 24px;
+                background: transparent;
             }
 
             .rp-analyzer-section {
-                margin-bottom: 20px;
-                background-color: #2a2a2a;
-                border-radius: 5px;
-                padding: 12px;
+                margin-bottom: 24px;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 20px;
+                backdrop-filter: blur(10px);
             }
 
             .rp-analyzer-section-title {
-                font-weight: bold;
+                font-weight: 600;
                 font-size: 16px;
-                margin-bottom: 10px;
-                color: #0df;
-                border-bottom: 1px solid #444;
-                padding-bottom: 5px;
+                margin-bottom: 16px;
+                color: #00d4ff;
+                display: flex;
+                align-items: center;
+                gap: 8px;
             }
+
+            .rp-score-card {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 16px;
+                margin-bottom: 20px;
+            }
+
+            .rp-score-item {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 10px;
+                padding: 16px;
+                text-align: center;
+                transition: all 0.2s ease;
+            }
+
+            .rp-score-item:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            }
+
+            .rp-score-value {
+                font-size: 24px;
+                font-weight: 700;
+                margin-bottom: 4px;
+            }
+
+            .rp-score-label {
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.7);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .rp-score-excellent { color: #00ff88; }
+            .rp-score-good { color: #00d4ff; }
+            .rp-score-neutral { color: #ffa500; }
+            .rp-score-poor { color: #ff6b6b; }
+            .rp-score-critical { color: #ff4757; }
 
             .rp-analyzer-data-row {
                 display: flex;
                 justify-content: space-between;
-                margin-bottom: 8px;
-                padding: 5px 0;
-                border-bottom: 1px dotted #3a3a3a;
+                align-items: center;
+                margin-bottom: 12px;
+                padding: 8px 0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .rp-analyzer-data-row:last-child {
+                border-bottom: none;
+                margin-bottom: 0;
             }
 
             .rp-analyzer-label {
-                color: #bbb;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 14px;
             }
 
             .rp-analyzer-value {
-                font-weight: bold;
+                font-weight: 600;
+                font-size: 14px;
+                color: #ffffff;
             }
 
             .rp-analyzer-input {
                 width: 100%;
-                padding: 10px;
-                background-color: #333;
-                border: 1px solid #444;
-                border-radius: 5px;
-                color: #fff;
-                margin-bottom: 10px;
+                padding: 12px 16px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 8px;
+                color: #ffffff;
+                margin-bottom: 12px;
                 font-size: 14px;
+                font-family: inherit;
+                transition: all 0.2s ease;
             }
 
             .rp-analyzer-input:focus {
                 outline: none;
-                border-color: #0df;
+                border-color: #00d4ff;
+                box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+            }
+
+            .rp-analyzer-input::placeholder {
+                color: rgba(255, 255, 255, 0.5);
             }
 
             .rp-analyzer-button {
-                background-color: #0df;
-                color: #111;
-                padding: 8px 15px;
+                background: linear-gradient(135deg, #00d4ff, #0096ff);
+                color: #000;
+                padding: 10px 20px;
                 border: none;
-                border-radius: 5px;
+                border-radius: 8px;
                 cursor: pointer;
-                font-weight: bold;
-                margin-right: 5px;
+                font-weight: 600;
+                font-size: 14px;
+                margin-right: 8px;
+                margin-bottom: 8px;
                 transition: all 0.2s ease;
+                font-family: inherit;
             }
 
             .rp-analyzer-button:hover {
-                background-color: #0ad;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
             }
 
             .rp-analyzer-button.rp-delete {
-                background-color: #f55;
-                padding: 5px 10px;
+                background: linear-gradient(135deg, #ff4757, #ff3742);
+                padding: 6px 12px;
                 font-size: 12px;
             }
 
             .rp-analyzer-button.rp-delete:hover {
-                background-color: #f33;
+                box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
             }
 
-            .rp-positive {
-                color: #0f8;
-            }
-
-            .rp-negative {
-                color: #f55;
-            }
-
-            .rp-warning {
-                color: #fa3;
-            }
-
-            .rp-neutral {
-                color: #0df;
-            }
-
-            .rp-transaction-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-                font-size: 14px;
-            }
-
-            .rp-transaction-table th, .rp-transaction-table td {
-                padding: 8px;
-                text-align: left;
-                border-bottom: 1px solid #444;
-            }
-
-            .rp-transaction-table th {
-                background-color: #333;
-                color: #0df;
-            }
-
-            .rp-transaction-table tr:hover {
-                background-color: #2c2c2c;
-            }
-
-            .rp-chart-container {
-                width: 100%;
-                height: 180px;
-                margin: 15px 0;
-                background-color: #1a1a1a;
-                border-radius: 5px;
-                border: 1px solid #333;
-            }
+            .rp-positive { color: #00ff88; }
+            .rp-negative { color: #ff6b6b; }
+            .rp-warning { color: #ffa500; }
+            .rp-neutral { color: #00d4ff; }
 
             .rp-toggle-button {
                 position: fixed;
-                bottom: 20px;
-                right: 20px;
-                width: 55px;
-                height: 55px;
+                bottom: 24px;
+                right: 24px;
+                width: 60px;
+                height: 60px;
                 border-radius: 50%;
-                background-color: #0df;
-                color: #111;
+                background: linear-gradient(135deg, #00d4ff, #0096ff);
+                color: #000;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-size: 24px;
                 cursor: pointer;
-                box-shadow: 0 0 15px rgba(0,0,0,0.7);
+                box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
                 z-index: 10001;
                 transition: all 0.3s ease;
-                border: 2px solid #0ad;
-                text-align: center;
-                line-height: 55px;
+                border: none;
             }
 
             .rp-toggle-button:hover {
                 transform: scale(1.1);
-                background-color: #0ad;
+                box-shadow: 0 12px 40px rgba(0, 212, 255, 0.5);
             }
 
             .rp-notification {
                 position: fixed;
-                bottom: 80px;
-                right: 20px;
-                background-color: #222;
+                bottom: 100px;
+                right: 24px;
+                background: rgba(15, 15, 15, 0.95);
+                backdrop-filter: blur(20px);
                 color: #fff;
-                padding: 12px 20px;
-                border-radius: 5px;
-                box-shadow: 0 0 15px rgba(0,0,0,0.7);
+                padding: 16px 20px;
+                border-radius: 12px;
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
                 z-index: 10002;
-                font-weight: bold;
+                font-weight: 500;
                 transition: all 0.3s ease;
-                border-left: 4px solid #0df;
+                border-left: 4px solid #00d4ff;
+                max-width: 300px;
             }
 
-            .rp-notification.rp-error {
-                border-left-color: #f55;
+            .rp-notification.rp-error { border-left-color: #ff4757; }
+            .rp-notification.rp-success { border-left-color: #00ff88; }
+            .rp-notification.rp-warning { border-left-color: #ffa500; }
+
+            .rp-prediction-card {
+                background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 150, 255, 0.05));
+                border: 1px solid rgba(0, 212, 255, 0.2);
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                text-align: center;
             }
 
-            .rp-notification.rp-success {
-                border-left-color: #0f8;
+            .rp-prediction-icon {
+                font-size: 32px;
+                margin-bottom: 12px;
+                display: block;
             }
 
-            .rp-notification.rp-warning {
-                border-left-color: #fa3;
+            .rp-prediction-text {
+                font-size: 16px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+
+            .rp-prediction-confidence {
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.7);
             }
 
             .rp-risk-analysis {
-                margin-top: 15px;
-                padding: 15px;
-                border-radius: 5px;
-                background-color: #222;
-                border: 1px solid #333;
+                background: rgba(255, 71, 87, 0.05);
+                border: 1px solid rgba(255, 71, 87, 0.2);
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
             }
 
             .rp-risk-title {
                 font-size: 16px;
-                font-weight: bold;
-                margin-bottom: 10px;
+                font-weight: 600;
+                margin-bottom: 16px;
                 display: flex;
                 align-items: center;
+                gap: 8px;
             }
 
-            .rp-risk-high {
-                color: #f55;
-            }
-
-            .rp-risk-medium {
-                color: #fa3;
-            }
-
-            .rp-risk-low {
-                color: #fc6;
-            }
-
-            .rp-risk-minimal {
-                color: #0f8;
+            .rp-risk-factors {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 16px;
             }
 
             .rp-risk-factor {
-                margin: 5px 0;
-                padding: 5px 10px;
-                background-color: #2a2a2a;
-                border-radius: 3px;
-                font-size: 14px;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 12px;
                 display: flex;
                 justify-content: space-between;
-            }
-
-            .rp-risk-score {
-                background-color: rgba(255,85,85,0.2);
-                padding: 2px 6px;
-                border-radius: 3px;
-                margin-left: 8px;
-                font-size: 12px;
-            }
-
-            .rp-recommendation {
-                margin-top: 15px;
-                padding: 10px;
-                border-radius: 5px;
-                font-weight: bold;
-                text-align: center;
-                background-color: rgba(255,85,85,0.1);
-                border: 1px solid rgba(255,85,85,0.3);
-            }
-
-            .rp-recommendation.rp-risk-medium {
-                background-color: rgba(255,170,51,0.1);
-                border: 1px solid rgba(255,170,51,0.3);
-            }
-
-            .rp-recommendation.rp-risk-low {
-                background-color: rgba(255,204,102,0.1);
-                border: 1px solid rgba(255,204,102,0.3);
-            }
-
-            .rp-recommendation.rp-risk-minimal {
-                background-color: rgba(0,255,136,0.1);
-                border: 1px solid rgba(0,255,136,0.3);
-            }
-
-            .rp-prediction {
-                padding: 10px;
-                border-radius: 5px;
-                margin-bottom: 15px;
-                font-weight: bold;
-                text-align: center;
-            }
-
-            .rp-prediction.rp-up {
-                background-color: rgba(0,255,136,0.1);
-                border: 1px solid rgba(0,255,136,0.3);
-                color: #0f8;
-            }
-
-            .rp-prediction.rp-down {
-                background-color: rgba(255,85,85,0.1);
-                border: 1px solid rgba(255,85,85,0.3);
-                color: #f55;
-            }
-
-            .rp-prediction.rp-neutral {
-                background-color: rgba(0,221,255,0.1);
-                border: 1px solid rgba(0,221,255,0.3);
-                color: #0df;
-            }
-
-            .rp-prediction.rp-bullish {
-                background-color: rgba(0,255,136,0.1);
-                border: 1px solid rgba(0,255,136,0.3);
-                color: #0f8;
-            }
-
-            .rp-prediction.rp-bearish {
-                background-color: rgba(255,85,85,0.1);
-                border: 1px solid rgba(255,85,85,0.3);
-                color: #f55;
-            }
-
-            .rp-settings-row {
-                display: flex;
                 align-items: center;
-                margin-bottom: 10px;
+                font-size: 14px;
             }
 
-            .rp-settings-label {
-                flex: 0 0 120px;
-                color: #bbb;
+            .rp-risk-impact {
+                font-size: 12px;
+                padding: 4px 8px;
+                border-radius: 6px;
+                font-weight: 600;
             }
 
-            .rp-settings-value {
-                flex: 1;
-            }
-
-            .rp-api-key-input {
-                position: relative;
-            }
-
-            .rp-api-key-show {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                cursor: pointer;
-                color: #888;
-            }
-
-            .rp-api-key-show:hover {
-                color: #0df;
-            }
+            .rp-risk-impact.critical { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
+            .rp-risk-impact.high { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+            .rp-risk-impact.medium { background: rgba(255, 165, 0, 0.2); color: #ffa500; }
+            .rp-risk-impact.positive { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
 
             .rp-empty-state {
                 text-align: center;
-                padding: 30px 0;
-                color: #888;
+                padding: 40px 20px;
+                color: rgba(255, 255, 255, 0.6);
             }
 
             .rp-empty-state-icon {
-                font-size: 40px;
-                margin-bottom: 15px;
-                color: #444;
+                font-size: 48px;
+                margin-bottom: 16px;
+                opacity: 0.5;
+            }
+
+            .rp-progress-bar {
+                width: 100%;
+                height: 8px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+                overflow: hidden;
+                margin-bottom: 8px;
+            }
+
+            .rp-progress-fill {
+                height: 100%;
+                border-radius: 4px;
+                transition: width 0.3s ease;
+            }
+
+            .rp-progress-excellent { background: linear-gradient(90deg, #00ff88, #00d4aa); }
+            .rp-progress-good { background: linear-gradient(90deg, #00d4ff, #0096ff); }
+            .rp-progress-neutral { background: linear-gradient(90deg, #ffa500, #ff8c00); }
+            .rp-progress-poor { background: linear-gradient(90deg, #ff6b6b, #ff5252); }
+            .rp-progress-critical { background: linear-gradient(90deg, #ff4757, #ff3742); }
+
+            .rp-transaction-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 16px;
+                font-size: 14px;
+                background: rgba(255, 255, 255, 0.02);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .rp-transaction-table th, .rp-transaction-table td {
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .rp-transaction-table th {
+                background: rgba(255, 255, 255, 0.05);
+                color: #00d4ff;
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 12px;
+                letter-spacing: 0.5px;
+            }
+
+            .rp-transaction-table tr:hover {
+                background: rgba(255, 255, 255, 0.03);
             }
 
             .rp-modal-backdrop {
@@ -1062,7 +967,8 @@ const setupSettingsTabEventListeners = () => {
                 left: 0;
                 width: 100%;
                 height: 100%;
-                background-color: rgba(0,0,0,0.7);
+                background: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(10px);
                 z-index: 10005;
                 display: flex;
                 justify-content: center;
@@ -1070,284 +976,221 @@ const setupSettingsTabEventListeners = () => {
             }
 
             .rp-modal {
-                background-color: #222;
-                padding: 20px;
-                border-radius: 10px;
-                max-width: 400px;
+                background: rgba(15, 15, 15, 0.95);
+                backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 24px;
+                border-radius: 16px;
+                max-width: 450px;
                 width: 90%;
-                box-shadow: 0 0 20px rgba(0,0,0,0.5);
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
             }
 
             .rp-modal-title {
                 font-size: 18px;
-                font-weight: bold;
-                margin-bottom: 15px;
-                color: #0df;
-                border-bottom: 1px solid #444;
-                padding-bottom: 10px;
+                font-weight: 600;
+                margin-bottom: 16px;
+                color: #00d4ff;
+                display: flex;
+                align-items: center;
+                gap: 8px;
             }
 
             .rp-modal-content {
-                margin-bottom: 20px;
+                margin-bottom: 24px;
+                color: rgba(255, 255, 255, 0.9);
+                line-height: 1.5;
             }
 
             .rp-modal-actions {
                 display: flex;
                 justify-content: flex-end;
+                gap: 12px;
             }
 
-            .rp-transactions-page-integration {
-                background-color: #2a2a2a;
-                border-radius: 5px;
-                padding: 15px;
-                margin-top: 15px;
-                border-left: 4px solid #0df;
-            }
-
-            .rp-transactions-title {
-                font-weight: bold;
-                margin-bottom: 10px;
-                color: #0df;
-            }
-
-            .rp-batch-actions {
+            .rp-chart-placeholder {
+                width: 100%;
+                height: 120px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px dashed rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
                 display: flex;
-                justify-content: space-between;
-                margin-bottom: 15px;
-                background-color: #333;
-                padding: 10px;
-                border-radius: 5px;
-            }
-
-            .rp-action-buttons {
-                display: flex;
-                gap: 5px;
-            }
-
-            .rp-pagination {
-                display: flex;
+                align-items: center;
                 justify-content: center;
-                margin-top: 15px;
-                gap: 5px;
+                color: rgba(255, 255, 255, 0.5);
+                font-size: 14px;
+                margin: 16px 0;
             }
 
-            .rp-page-button {
-                padding: 5px 10px;
-                background-color: #333;
-                border-radius: 3px;
-                cursor: pointer;
-                transition: all 0.2s;
+            .rp-metric-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 12px;
+                margin: 16px 0;
             }
 
-            .rp-page-button:hover {
-                background-color: #444;
+            .rp-metric-item {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                padding: 12px;
             }
 
-            .rp-page-button.active {
-                background-color: #0df;
-                color: #111;
-                font-weight: bold;
-            }
-
-            .rp-import-export {
-                margin-top: 20px;
-            }
-
-            .rp-import-export-title {
-                font-weight: bold;
-                margin-bottom: 10px;
-                color: #0df;
-            }
-
-            .rp-import-export-buttons {
-                display: flex;
-                gap: 10px;
-            }
-
-            .rp-transaction-note {
-                font-style: italic;
+            .rp-metric-title {
                 font-size: 12px;
-                color: #888;
-                margin-top: 10px;
+                color: rgba(255, 255, 255, 0.7);
+                margin-bottom: 4px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
             }
 
-            /* Responsive styles for smaller screens */
+            .rp-metric-value {
+                font-size: 16px;
+                font-weight: 600;
+                color: #ffffff;
+            }
+
             @media (max-width: 768px) {
                 .rp-analyzer {
-                    width: 90%;
-                    right: 5%;
-                    max-height: 80vh;
+                    width: 95%;
+                    right: 2.5%;
+                    max-height: 85vh;
                 }
+                
+                .rp-score-card {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+                
+                .rp-metric-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
 
-                .rp-toggle-button {
-                    width: 45px;
-                    height: 45px;
-                    font-size: 20px;
-                }
+            @keyframes rp-spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+
+            .rp-loading {
+                width: 40px;
+                height: 40px;
+                border: 4px solid rgba(255, 255, 255, 0.1);
+                border-top: 4px solid #00d4ff;
+                border-radius: 50%;
+                animation: rp-spin 1s linear infinite;
+                margin: 20px auto;
             }
         `);
     };
 
-    // Create main UI container
+    // ===========================
+    // UI Creation Functions
+    // ===========================
+
     const createUI = () => {
         createToggleButton();
 
-        // Create main container (initially hidden)
         const container = document.createElement('div');
         container.className = 'rp-analyzer';
         container.style.display = 'none';
         container.id = 'rp-analyzer-container';
 
-        // Create header
         const header = document.createElement('div');
         header.className = 'rp-analyzer-header';
 
         const title = document.createElement('div');
         title.className = 'rp-analyzer-title';
-        title.textContent = 'RugPlay Market Analyzer';
+        title.innerHTML = '📊 RugPlay Analyzer Pro';
 
         const closeButton = document.createElement('div');
         closeButton.className = 'rp-analyzer-close';
-        closeButton.textContent = '×';
+        closeButton.innerHTML = '×';
         closeButton.addEventListener('click', toggleAnalyzer);
 
         header.appendChild(title);
         header.appendChild(closeButton);
 
-        // Create tabs
         const tabs = document.createElement('div');
         tabs.className = 'rp-analyzer-tabs';
 
-        const coinTab = document.createElement('div');
-        coinTab.className = 'rp-analyzer-tab active';
-        coinTab.textContent = 'Analysis';
-        coinTab.dataset.tab = 'coin';
-        coinTab.addEventListener('click', (e) => switchTab(e.target));
+        const tabsData = [
+            { key: 'analysis', label: '🔍 Analysis', icon: '🔍' },
+            { key: 'portfolio', label: '💼 Portfolio', icon: '💼' },
+            { key: 'transactions', label: '📝 Transactions', icon: '📝' },
+            { key: 'search', label: '🔎 Search', icon: '🔎' },
+            { key: 'settings', label: '⚙️ Settings', icon: '⚙️' }
+        ];
 
-        const portfolioTab = document.createElement('div');
-        portfolioTab.className = 'rp-analyzer-tab';
-        portfolioTab.textContent = 'Portfolio';
-        portfolioTab.dataset.tab = 'portfolio';
-        portfolioTab.addEventListener('click', (e) => switchTab(e.target));
+        tabsData.forEach((tab, index) => {
+            const tabElement = document.createElement('div');
+            tabElement.className = `rp-analyzer-tab ${index === 0 ? 'active' : ''}`;
+            tabElement.innerHTML = `${tab.icon} ${tab.label}`;
+            tabElement.dataset.tab = tab.key;
+            tabElement.addEventListener('click', (e) => switchTab(e.target));
+            tabs.appendChild(tabElement);
+        });
 
-        const transactionTab = document.createElement('div');
-        transactionTab.className = 'rp-analyzer-tab';
-        transactionTab.textContent = 'Transactions';
-        transactionTab.dataset.tab = 'transactions';
-        transactionTab.addEventListener('click', (e) => switchTab(e.target));
-
-        const searchTab = document.createElement('div');
-        searchTab.className = 'rp-analyzer-tab';
-        searchTab.textContent = 'Search';
-        searchTab.dataset.tab = 'search';
-        searchTab.addEventListener('click', (e) => switchTab(e.target));
-
-        const settingsTab = document.createElement('div');
-        settingsTab.className = 'rp-analyzer-tab';
-        settingsTab.textContent = '⚙️';
-        settingsTab.dataset.tab = 'settings';
-        settingsTab.title = 'Settings';
-        settingsTab.addEventListener('click', (e) => switchTab(e.target));
-
-        tabs.appendChild(coinTab);
-        tabs.appendChild(portfolioTab);
-        tabs.appendChild(transactionTab);
-        tabs.appendChild(searchTab);
-        tabs.appendChild(settingsTab);
-
-        // Create content area
         const content = document.createElement('div');
         content.className = 'rp-analyzer-content';
         content.id = 'rp-analyzer-content';
 
-        // Assemble UI
         container.appendChild(header);
         container.appendChild(tabs);
         container.appendChild(content);
-
         document.body.appendChild(container);
 
-        // Check if API key is set
+        // Initialize with settings check
         const apiKey = getApiKey();
         if (!apiKey) {
-            // If no API key, show settings tab first
-            switchTab(settingsTab);
+            switchTab(document.querySelector('[data-tab="settings"]'));
         } else {
-            // Initial content
-            updateCoinTab();
+            updateAnalysisTab();
         }
 
-        // Special handling for transactions page
+        // Auto-show on transactions page
         if (window.location.href.includes('rugplay.com/transactions')) {
-            // If we're on the transactions page, auto-show the analyzer
             setTimeout(() => {
                 if (container.style.display === 'none') {
                     toggleAnalyzer();
-                    // Switch to transactions tab
-                    switchTab(transactionTab);
+                    switchTab(document.querySelector('[data-tab="transactions"]'));
                 }
             }, 1000);
         }
     };
 
-    // Create toggle button separately to ensure it's always visible
     const createToggleButton = () => {
-        // Remove any existing button first to avoid duplicates
         const existingButton = document.getElementById('rp-toggle-button');
-        if (existingButton) {
-            existingButton.remove();
-        }
+        if (existingButton) existingButton.remove();
 
-        // Create new toggle button
         const toggleButton = document.createElement('div');
         toggleButton.className = 'rp-toggle-button';
         toggleButton.id = 'rp-toggle-button';
         toggleButton.innerHTML = '📊';
-        toggleButton.title = 'Toggle RugPlay Analyzer';
+        toggleButton.title = 'RugPlay Analyzer Pro';
         toggleButton.addEventListener('click', toggleAnalyzer);
         document.body.appendChild(toggleButton);
-
-        // Ensure button is visible
-        toggleButton.style.display = 'flex';
     };
 
-    // Tab switching
     const switchTab = (tabElement) => {
-        // Update active class
         document.querySelectorAll('.rp-analyzer-tab').forEach(tab => {
             tab.classList.remove('active');
         });
         tabElement.classList.add('active');
 
-        // Update content based on selected tab
         const tabName = tabElement.dataset.tab;
-
         switch (tabName) {
-            case 'coin':
-                updateCoinTab();
-                break;
-            case 'portfolio':
-                updatePortfolioTab();
-                break;
-            case 'transactions':
-                updateTransactionsTab();
-                break;
-            case 'search':
-                updateSearchTab();
-                break;
-            case 'settings':
-                updateSettingsTab();
-                break;
+            case 'analysis': updateAnalysisTab(); break;
+            case 'portfolio': updatePortfolioTab(); break;
+            case 'transactions': updateTransactionsTab(); break;
+            case 'search': updateSearchTab(); break;
+            case 'settings': updateSettingsTab(); break;
         }
     };
 
-    // Toggle analyzer visibility
     const toggleAnalyzer = () => {
         const container = document.getElementById('rp-analyzer-container');
         if (container.style.display === 'none') {
             container.style.display = 'block';
-
-            // Check URL for coin
             const symbol = getCoinFromUrl();
             if (symbol) {
                 loadCoinData(symbol);
@@ -1357,71 +1200,48 @@ const setupSettingsTabEventListeners = () => {
         }
     };
 
-    // Get coin symbol from URL
-    const getCoinFromUrl = () => {
-        const url = window.location.href;
-        const coinMatch = url.match(/\/coin\/([A-Z0-9]+)/i);
-        return coinMatch ? coinMatch[1] : null;
-    };
+    // ===========================
+    // Tab Update Functions
+    // ===========================
 
-    // Update UI with coin data
-    const updateCoinTab = async () => {
+    const updateAnalysisTab = async () => {
         const content = document.getElementById('rp-analyzer-content');
 
-        // Check if API key is set
-        const apiKey = getApiKey();
-        if (!apiKey) {
+        if (!getApiKey()) {
             content.innerHTML = `
-                <div class="rp-analyzer-section">
-                    <div class="rp-analyzer-section-title">API Key Required</div>
-                    <p>Please configure your API key in the settings tab before using the analyzer.</p>
-                    <button class="rp-analyzer-button" id="rp-goto-settings">Go to Settings</button>
+                <div class="rp-empty-state">
+                    <div class="rp-empty-state-icon">🔐</div>
+                    <h3>API Key Required</h3>
+                    <p>Configure your RugPlay API key to start analyzing coins</p>
+                    <button class="rp-analyzer-button" onclick="document.querySelector('[data-tab=\\"settings\\"]').click()">
+                        ⚙️ Go to Settings
+                    </button>
                 </div>
             `;
-
-            document.getElementById('rp-goto-settings').addEventListener('click', () => {
-                document.querySelector('[data-tab="settings"]').click();
-            });
-
             return;
         }
 
-        // Default content when no coin is selected
         let symbol = currentCoin || getCoinFromUrl();
-
         if (!symbol) {
             content.innerHTML = `
                 <div class="rp-empty-state">
                     <div class="rp-empty-state-icon">🔍</div>
-                    <div>No Coin Selected</div>
-                    <p>Navigate to a coin page or search for a coin to analyze.</p>
-                    <button class="rp-analyzer-button" id="rp-goto-search">Search Coins</button>
+                    <h3>No Coin Selected</h3>
+                    <p>Navigate to a coin page or search for a coin to analyze</p>
+                    <button class="rp-analyzer-button" onclick="document.querySelector('[data-tab=\\"search\\"]').click()">
+                        🔎 Search Coins
+                    </button>
                 </div>
             `;
-
-            document.getElementById('rp-goto-search').addEventListener('click', () => {
-                document.querySelector('[data-tab="search"]').click();
-            });
-
             return;
         }
 
-        // Loading state
         content.innerHTML = `
             <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Loading ${symbol}...</div>
-                <p>Fetching market data...</p>
-                <div style="display: flex; justify-content: center; padding: 20px;">
-                    <div style="width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #0df; border-radius: 50%; animation: rp-spin 1s linear infinite;"></div>
-                </div>
+                <div class="rp-analyzer-section-title">🔄 Loading ${symbol}...</div>
+                <div class="rp-loading"></div>
+                <p style="text-align: center; margin-top: 16px;">Fetching comprehensive market data...</p>
             </div>
-
-            <style>
-                @keyframes rp-spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-            </style>
         `;
 
         try {
@@ -1429,80 +1249,155 @@ const setupSettingsTabEventListeners = () => {
         } catch (error) {
             content.innerHTML = `
                 <div class="rp-analyzer-section">
-                    <div class="rp-analyzer-section-title">Error</div>
-                    <p style="color: #f55;">${error}</p>
-                    <button class="rp-analyzer-button" id="rp-retry-load">Retry</button>
+                    <div class="rp-analyzer-section-title">❌ Error</div>
+                    <p style="color: #ff6b6b;">${error}</p>
+                    <button class="rp-analyzer-button" onclick="updateAnalysisTab()">🔄 Retry</button>
                 </div>
             `;
-
-            document.getElementById('rp-retry-load').addEventListener('click', () => {
-                updateCoinTab();
-            });
         }
     };
 
-    // Update transactions tab
-    const updateTransactionsTab = () => {
+    const updatePortfolioTab = () => {
         const content = document.getElementById('rp-analyzer-content');
         const portfolio = getPortfolio();
+        const coins = Object.keys(portfolio);
 
-        // Check if we have any transactions
-        let totalTransactions = 0;
-        const allTransactions = [];
-
-        Object.keys(portfolio).forEach(symbol => {
-            if (portfolio[symbol].transactions) {
-                portfolio[symbol].transactions.forEach(tx => {
-                    allTransactions.push({
-                        ...tx,
-                        symbol
-                    });
-                    totalTransactions++;
-                });
-            }
-        });
-
-        // Sort transactions by date (newest first)
-        allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        if (totalTransactions === 0) {
+        if (coins.length === 0) {
             content.innerHTML = `
                 <div class="rp-empty-state">
-                    <div class="rp-empty-state-icon">📝</div>
-                    <div>No Transactions</div>
-                    <p>You haven't recorded any transactions yet.</p>
-                    <p>Go to a coin page and add a transaction to get started.</p>
-                </div>
-
-                <div class="rp-transactions-page-integration">
-                    <div class="rp-transactions-title">RugPlay Transactions Page</div>
-                    <p>You're currently on the RugPlay transactions page. This script creates a separate tracking system for your trades.</p>
-                    <p>Unfortunately, the official transaction history on this page is not available through the API, so we can't automatically import it.</p>
-                    <p>You'll need to manually add your transactions to use the analyzer's portfolio tracking features.</p>
+                    <div class="rp-empty-state-icon">💼</div>
+                    <h3>Your Portfolio is Empty</h3>
+                    <p>Start tracking your investments by adding transactions</p>
+                    <button class="rp-analyzer-button" onclick="document.querySelector('[data-tab=\\"search\\"]').click()">
+                        🔎 Find Coins to Track
+                    </button>
                 </div>
             `;
             return;
         }
 
-        // Pagination setup
-        const itemsPerPage = 10;
+        let totalValue = 0;
+        let totalCost = 0;
+        let portfolioHTML = `
+            <div class="rp-analyzer-section">
+                <div class="rp-analyzer-section-title">💼 Portfolio Overview</div>
+                <div class="rp-score-card">
+        `;
+
+        // Calculate portfolio metrics
+        coins.forEach(symbol => {
+            const holdings = calculateHoldings(symbol);
+            if (holdings.quantity > 0) {
+                // Note: We'd need current price to calculate actual values
+                // For now, showing holdings data
+                totalCost += holdings.quantity * holdings.avgPrice;
+            }
+        });
+
+        portfolioHTML += `
+                    <div class="rp-score-item">
+                        <div class="rp-score-value">${coins.length}</div>
+                        <div class="rp-score-label">Assets Tracked</div>
+                    </div>
+                    <div class="rp-score-item">
+                        <div class="rp-score-value">${formatNumber(totalCost)}</div>
+                        <div class="rp-score-label">Total Cost Basis</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rp-analyzer-section">
+                <div class="rp-analyzer-section-title">📊 Holdings</div>
+                <table class="rp-transaction-table">
+                    <thead>
+                        <tr>
+                            <th>Coin</th>
+                            <th>Quantity</th>
+                            <th>Avg Price</th>
+                            <th>Cost Basis</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        coins.forEach(symbol => {
+            const holdings = calculateHoldings(symbol);
+            if (holdings.quantity > 0) {
+                const costBasis = holdings.quantity * holdings.avgPrice;
+                portfolioHTML += `
+                    <tr>
+                        <td><strong>${symbol}</strong></td>
+                        <td>${formatNumberWithCommas(holdings.quantity.toFixed(6))}</td>
+                        <td>${formatPrice(holdings.avgPrice)}</td>
+                        <td>${formatNumberWithCommas(costBasis.toFixed(2))}</td>
+                        <td>
+                            <button class="rp-analyzer-button" onclick="viewCoin('${symbol}')">
+                                🔍 Analyze
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }
+        });
+
+        portfolioHTML += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        content.innerHTML = portfolioHTML;
+
+        // Add global function for viewing coins
+        window.viewCoin = (symbol) => {
+            currentCoin = symbol;
+            document.querySelector('[data-tab="analysis"]').click();
+        };
+    };
+
+    const updateTransactionsTab = () => {
+        const content = document.getElementById('rp-analyzer-content');
+        const portfolio = getPortfolio();
+        
+        let allTransactions = [];
+        Object.keys(portfolio).forEach(symbol => {
+            if (portfolio[symbol].transactions) {
+                portfolio[symbol].transactions.forEach(tx => {
+                    allTransactions.push({ ...tx, symbol });
+                });
+            }
+        });
+
+        allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        if (allTransactions.length === 0) {
+            content.innerHTML = `
+                <div class="rp-empty-state">
+                    <div class="rp-empty-state-icon">📝</div>
+                    <h3>No Transactions</h3>
+                    <p>Your transaction history will appear here</p>
+                </div>
+            `;
+            return;
+        }
+
+        const itemsPerPage = 15;
         const totalPages = Math.ceil(allTransactions.length / itemsPerPage);
         const currentPage = transactionsCurrentPage || 1;
-
-        // Get transactions for current page
         const startIndex = (currentPage - 1) * itemsPerPage;
         const endIndex = startIndex + itemsPerPage;
         const currentTransactions = allTransactions.slice(startIndex, endIndex);
 
         content.innerHTML = `
             <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Transaction History</div>
-
-                <div class="rp-batch-actions">
-                    <div>Total Transactions: ${totalTransactions}</div>
-                    <div class="rp-action-buttons">
-                        <button class="rp-analyzer-button" id="rp-export-transactions">Export</button>
-                        <button class="rp-analyzer-button" id="rp-import-transactions">Import</button>
+                <div class="rp-analyzer-section-title">📝 Transaction History</div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div>Total: <strong>${allTransactions.length}</strong> transactions</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="rp-analyzer-button" onclick="exportTransactions()">📤 Export</button>
+                        <button class="rp-analyzer-button" onclick="showImportModal()">📥 Import</button>
                     </div>
                 </div>
 
@@ -1522,16 +1417,15 @@ const setupSettingsTabEventListeners = () => {
                         ${currentTransactions.map(tx => `
                             <tr>
                                 <td>${formatDate(tx.date)}</td>
-                                <td>${tx.symbol}</td>
-                                <td>${tx.type.toUpperCase()}</td>
+                                <td><strong>${tx.symbol}</strong></td>
+                                <td><span class="rp-${tx.type === 'buy' ? 'positive' : 'negative'}">${tx.type.toUpperCase()}</span></td>
                                 <td>${formatNumberWithCommas(Math.abs(tx.quantity).toFixed(6))}</td>
-                                <td>$${formatPrice(tx.price)}</td>
-                                <td>$${formatNumberWithCommas((Math.abs(tx.quantity) * tx.price).toFixed(2))}</td>
+                                <td>${formatPrice(tx.price)}</td>
+                                <td>${formatNumberWithCommas((Math.abs(tx.quantity) * tx.price).toFixed(2))}</td>
                                 <td>
-                                    <button class="rp-analyzer-button rp-delete"
-                                        data-symbol="${tx.symbol}"
-                                        data-txid="${tx.id}"
-                                        data-action="delete-tx">Delete</button>
+                                    <button class="rp-analyzer-button rp-delete" onclick="deleteTransactionConfirm('${tx.symbol}', '${tx.id}')">
+                                        🗑️ Delete
+                                    </button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -1539,130 +1433,657 @@ const setupSettingsTabEventListeners = () => {
                 </table>
 
                 ${totalPages > 1 ? `
-                    <div class="rp-pagination">
-                        ${currentPage > 1 ? `
-                            <div class="rp-page-button" data-page="${currentPage - 1}">❮</div>
-                        ` : ''}
-
-                        ${Array.from({length: totalPages}, (_, i) => i + 1).map(page => `
-                            <div class="rp-page-button ${page === currentPage ? 'active' : ''}" data-page="${page}">${page}</div>
-                        `).join('')}
-
-                        ${currentPage < totalPages ? `
-                            <div class="rp-page-button" data-page="${currentPage + 1}">❯</div>
-                        ` : ''}
+                    <div style="display: flex; justify-content: center; gap: 8px; margin-top: 16px;">
+                        ${currentPage > 1 ? `<button class="rp-analyzer-button" onclick="changePage(${currentPage - 1})">❮ Prev</button>` : ''}
+                        <span style="display: flex; align-items: center; padding: 0 16px;">
+                            Page ${currentPage} of ${totalPages}
+                        </span>
+                        ${currentPage < totalPages ? `<button class="rp-analyzer-button" onclick="changePage(${currentPage + 1})">Next ❯</button>` : ''}
                     </div>
                 ` : ''}
-
-                <p class="rp-transaction-note">
-                    Note: These transactions are stored locally in your browser and are separate from the official RugPlay transaction history.
-                </p>
             </div>
-
-            ${window.location.href.includes('rugplay.com/transactions') ? `
-                <div class="rp-transactions-page-integration">
-                    <div class="rp-transactions-title">RugPlay Transactions Page</div>
-                    <p>You're currently on the RugPlay transactions page. The script provides a separate tracking system for your trades.</p>
-                    <p>Unfortunately, the official transaction history on this page is not available through the API, so we can't automatically import it.</p>
-                    <p>You can manually add transactions by going to a specific coin page and using the "Add Transaction" form.</p>
-                </div>
-            ` : ''}
         `;
 
-        // Add event listeners for pagination
-        document.querySelectorAll('.rp-page-button').forEach(button => {
-            button.addEventListener('click', () => {
-                transactionsCurrentPage = parseInt(button.dataset.page);
-                updateTransactionsTab();
-            });
-        });
+        // Add global functions
+        window.changePage = (page) => {
+            transactionsCurrentPage = page;
+            updateTransactionsTab();
+        };
 
-        // Add event listeners for delete buttons
-        document.querySelectorAll('[data-action="delete-tx"]').forEach(button => {
-            button.addEventListener('click', () => {
-                const symbol = button.dataset.symbol;
-                const txId = button.dataset.txid;
-
-                showConfirmModal(
-                    'Delete Transaction',
-                    `Are you sure you want to delete this ${symbol} transaction? This action cannot be undone.`,
-                    () => {
-                        const success = deleteTransaction(symbol, txId);
-                        if (success) {
-                            showNotification('Transaction deleted successfully', 'success');
-                            updateTransactionsTab();
-                        } else {
-                            showNotification('Failed to delete transaction', 'error');
-                        }
+        window.deleteTransactionConfirm = (symbol, txId) => {
+            showConfirmModal(
+                '🗑️ Delete Transaction',
+                `Are you sure you want to delete this ${symbol} transaction?`,
+                () => {
+                    if (deleteTransaction(symbol, txId)) {
+                        showNotification('Transaction deleted successfully', 'success');
+                        updateTransactionsTab();
+                    } else {
+                        showNotification('Failed to delete transaction', 'error');
                     }
-                );
-            });
-        });
-
-        // Add event listeners for import/export buttons
-        document.getElementById('rp-export-transactions').addEventListener('click', exportTransactions);
-        document.getElementById('rp-import-transactions').addEventListener('click', () => showImportModal());
+                }
+            );
+        };
     };
 
-    // Current page for transactions tab pagination
+    const updateSearchTab = () => {
+        const content = document.getElementById('rp-analyzer-content');
+        
+        content.innerHTML = `
+            <div class="rp-analyzer-section">
+                <div class="rp-analyzer-section-title">🔎 Search Coins</div>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <input type="text" class="rp-analyzer-input" id="rp-search-input" 
+                           placeholder="Enter coin name or symbol..." style="margin-bottom: 0; flex: 1;">
+                    <button class="rp-analyzer-button" onclick="performSearch()">🔍 Search</button>
+                </div>
+            </div>
+            <div id="rp-search-results"></div>
+        `;
+
+        document.getElementById('rp-search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        window.performSearch = async () => {
+            const searchTerm = document.getElementById('rp-search-input').value.trim();
+            if (!searchTerm) {
+                showNotification('Please enter a search term', 'error');
+                return;
+            }
+
+            const resultsContainer = document.getElementById('rp-search-results');
+            resultsContainer.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div class="rp-loading"></div>
+                    <p style="margin-top: 16px;">Searching for "${searchTerm}"...</p>
+                </div>
+            `;
+
+            try {
+                const results = await searchCoins(searchTerm);
+                
+                if (!results.coins || results.coins.length === 0) {
+                    resultsContainer.innerHTML = `
+                        <div class="rp-empty-state">
+                            <div class="rp-empty-state-icon">❌</div>
+                            <h3>No Results Found</h3>
+                            <p>No coins found matching "${searchTerm}"</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                resultsContainer.innerHTML = `
+                    <div class="rp-analyzer-section">
+                        <div class="rp-analyzer-section-title">📊 Search Results (${results.coins.length})</div>
+                        <table class="rp-transaction-table">
+                            <thead>
+                                <tr>
+                                    <th>Coin</th>
+                                    <th>Price</th>
+                                    <th>24h Change</th>
+                                    <th>Market Cap</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${results.coins.map(coin => {
+                                    const changePercent = ((coin.change24h / (coin.currentPrice - coin.change24h)) * 100).toFixed(2);
+                                    const direction = changePercent >= 0 ? 'positive' : 'negative';
+                                    return `
+                                        <tr>
+                                            <td><strong>${coin.name}</strong><br><small>${coin.symbol}</small></td>
+                                            <td>${formatPrice(coin.currentPrice)}</td>
+                                            <td class="rp-${direction}">
+                                                ${changePercent >= 0 ? '+' : ''}${changePercent}%
+                                            </td>
+                                            <td>${formatNumber(coin.marketCap)}</td>
+                                            <td>
+                                                <button class="rp-analyzer-button" onclick="analyzeCoin('${coin.symbol}')">
+                                                    🔍 Analyze
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                window.analyzeCoin = (symbol) => {
+                    currentCoin = symbol;
+                    document.querySelector('[data-tab="analysis"]').click();
+                };
+
+            } catch (error) {
+                resultsContainer.innerHTML = `
+                    <div class="rp-analyzer-section">
+                        <div class="rp-analyzer-section-title">❌ Error</div>
+                        <p style="color: #ff6b6b;">Error searching: ${error}</p>
+                        <button class="rp-analyzer-button" onclick="performSearch()">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        };
+    };
+
+    const updateSettingsTab = () => {
+        const content = document.getElementById('rp-analyzer-content');
+        const apiKey = getApiKey();
+
+        content.innerHTML = `
+            <div class="rp-analyzer-section">
+                <div class="rp-analyzer-section-title">🔐 API Configuration</div>
+                <p style="margin-bottom: 16px; color: rgba(255, 255, 255, 0.8);">
+                    Enter your RugPlay API key to access comprehensive market data
+                </p>
+                
+                <div style="position: relative;">
+                    <input type="password" class="rp-analyzer-input" id="rp-api-key"
+                           value="${apiKey}" placeholder="Enter your RugPlay API key...">
+                    <button class="rp-analyzer-button" id="rp-toggle-key-visibility" 
+                            style="position: absolute; right: 8px; top: 8px; padding: 8px;">👁️</button>
+                </div>
+                
+                <button class="rp-analyzer-button" onclick="saveApiKey()">💾 Save API Key</button>
+            </div>
+
+            <div class="rp-analyzer-section">
+                <div class="rp-analyzer-section-title">💼 Portfolio Management</div>
+                <p style="margin-bottom: 16px; color: rgba(255, 255, 255, 0.8);">
+                    Backup and restore your portfolio data
+                </p>
+                
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="rp-analyzer-button" onclick="exportTransactions()">📤 Export Portfolio</button>
+                    <button class="rp-analyzer-button" onclick="showImportModal()">📥 Import Portfolio</button>
+                    <button class="rp-analyzer-button rp-delete" onclick="clearPortfolioConfirm()">🗑️ Clear All Data</button>
+                </div>
+            </div>
+
+            <div class="rp-analyzer-section">
+                <div class="rp-analyzer-section-title">ℹ️ About</div>
+                <div class="rp-metric-grid">
+                    <div class="rp-metric-item">
+                        <div class="rp-metric-title">Version</div>
+                        <div class="rp-metric-value">2.0 Enhanced</div>
+                    </div>
+                    <div class="rp-metric-item">
+                        <div class="rp-metric-title">Author</div>
+                        <div class="rp-metric-value">seltonmt012</div>
+                    </div>
+                    <div class="rp-metric-item">
+                        <div class="rp-metric-title">Updated</div>
+                        <div class="rp-metric-value">2025-06-26</div>
+                    </div>
+                    <div class="rp-metric-item">
+                        <div class="rp-metric-title">Features</div>
+                        <div class="rp-metric-value">AI Analysis</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Event listeners
+        document.getElementById('rp-toggle-key-visibility').addEventListener('click', () => {
+            const input = document.getElementById('rp-api-key');
+            const button = document.getElementById('rp-toggle-key-visibility');
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.textContent = '🔒';
+            } else {
+                input.type = 'password';
+                button.textContent = '👁️';
+            }
+        });
+
+        window.saveApiKey = () => {
+            const key = document.getElementById('rp-api-key').value.trim();
+            if (!key) {
+                showNotification('API key cannot be empty', 'error');
+                return;
+            }
+            saveApiKey(key);
+            showNotification('API key saved successfully', 'success');
+            setTimeout(() => {
+                document.querySelector('[data-tab="analysis"]').click();
+            }, 1000);
+        };
+
+        window.clearPortfolioConfirm = () => {
+            showConfirmModal(
+                '🗑️ Clear All Data',
+                'This will permanently delete all your portfolio data and transactions. This action cannot be undone.',
+                () => {
+                    savePortfolio({});
+                    showNotification('Portfolio data cleared successfully', 'success');
+                    updatePortfolioTab();
+                }
+            );
+        };
+    };
+
+    // ===========================
+    // Enhanced Coin Data Loading
+    // ===========================
+
+    let currentCoin = null;
+    let currentCoinData = null;
+    let currentHoldersData = null;
     let transactionsCurrentPage = 1;
 
-    // Export transactions to JSON file
-    const exportTransactions = () => {
+    const loadCoinData = async (symbol) => {
+        try {
+            const [coinData, holdersData] = await Promise.all([
+                fetchCoinData(symbol),
+                fetchCoinHolders(symbol)
+            ]);
+
+            currentCoin = symbol;
+            currentCoinData = coinData;
+            currentHoldersData = holdersData;
+
+            const holdings = calculateHoldings(symbol);
+            const coin = coinData.coin;
+            const price = coin.currentPrice;
+            const change24h = coin.change24h;
+            const changePercent = ((change24h / (price - change24h)) * 100);
+
+            // Enhanced Analysis
+            const priceAnalysis = analyzePrice(coinData.candlestickData);
+            const securityAnalysis = analyzeSecurity(coinData, holdersData);
+            const activityAnalysis = analyzeActivity(coinData, holdersData);
+            const profitAnalysis = analyzeProfitability(coinData, holdings);
+
+            // Personal P&L
+            let profitLoss = 0;
+            let profitLossPercent = 0;
+            if (holdings.quantity > 0) {
+                profitLoss = holdings.quantity * (price - holdings.avgPrice);
+                profitLossPercent = ((price / holdings.avgPrice) - 1) * 100;
+            }
+
+            const content = document.getElementById('rp-analyzer-content');
+            content.innerHTML = `
+                <!-- Prediction Card -->
+                <div class="rp-prediction-card">
+                    <div class="rp-prediction-icon">${getPredictionIcon(priceAnalysis.trend)}</div>
+                    <div class="rp-prediction-text">${priceAnalysis.message}</div>
+                    <div class="rp-prediction-confidence">Confidence: ${priceAnalysis.confidence.toFixed(0)}%</div>
+                </div>
+
+                <!-- Overall Scores -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">🎯 ${coin.name} (${coin.symbol}) Analysis</div>
+                    <div class="rp-score-card">
+                        <div class="rp-score-item">
+                            <div class="rp-score-value rp-score-${getScoreClass(securityAnalysis.securityScore)}">${securityAnalysis.securityScore}/100</div>
+                            <div class="rp-score-label">Security Score</div>
+                        </div>
+                        <div class="rp-score-item">
+                            <div class="rp-score-value rp-score-${getScoreClass(activityAnalysis.activityScore)}">${activityAnalysis.activityScore.toFixed(0)}/100</div>
+                            <div class="rp-score-label">Activity Level</div>
+                        </div>
+                        <div class="rp-score-item">
+                            <div class="rp-score-value rp-score-${getProfitClass(profitAnalysis.level)}">${profitAnalysis.profitScore.toFixed(0)}/100</div>
+                            <div class="rp-score-label">Profit Potential</div>
+                        </div>
+                        <div class="rp-score-item">
+                            <div class="rp-score-value ${changePercent >= 0 ? 'rp-positive' : 'rp-negative'}">
+                                ${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%
+                            </div>
+                            <div class="rp-score-label">24h Change</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Data -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">📊 Market Data</div>
+                    <div class="rp-metric-grid">
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Current Price</div>
+                            <div class="rp-metric-value">${formatPrice(price)}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Market Cap</div>
+                            <div class="rp-metric-value">${formatNumber(coin.marketCap)}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">24h Volume</div>
+                            <div class="rp-metric-value">${formatNumber(coin.volume24h)}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Liquidity</div>
+                            <div class="rp-metric-value">${formatNumber(coin.poolBaseCurrencyAmount)}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Supply</div>
+                            <div class="rp-metric-value">${formatNumber(coin.circulatingSupply)}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Holders</div>
+                            <div class="rp-metric-value">${holdersData.holders.length}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Analysis -->
+                <div class="rp-risk-analysis">
+                    <div class="rp-risk-title">🛡️ Security Analysis - ${securityAnalysis.level}</div>
+                    <div style="margin-bottom: 16px;">
+                        <div class="rp-progress-bar">
+                            <div class="rp-progress-fill rp-progress-${getScoreClass(securityAnalysis.securityScore)}" 
+                                 style="width: ${securityAnalysis.securityScore}%"></div>
+                        </div>
+                        <div style="text-align: center; margin-top: 8px; font-weight: 600;">
+                            ${securityAnalysis.recommendation}
+                        </div>
+                    </div>
+                    <div class="rp-risk-factors">
+                        ${securityAnalysis.factors.map(factor => `
+                            <div class="rp-risk-factor">
+                                <span>${factor.message}</span>
+                                <span class="rp-risk-impact ${factor.type}">${factor.impact > 0 ? '+' : ''}${factor.impact}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Activity Analysis -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">⚡ Activity Analysis - ${activityAnalysis.level}</div>
+                    <div class="rp-progress-bar">
+                        <div class="rp-progress-fill rp-progress-${getScoreClass(activityAnalysis.activityScore)}" 
+                             style="width: ${activityAnalysis.activityScore}%"></div>
+                    </div>
+                    <div class="rp-metric-grid" style="margin-top: 16px;">
+                        ${activityAnalysis.factors.map(factor => `
+                            <div class="rp-metric-item">
+                                <div class="rp-metric-title">${factor.metric}</div>
+                                <div class="rp-metric-value">${factor.value}</div>
+                                <div style="font-size: 12px; color: rgba(255,255,255,0.6);">
+                                    Score: ${factor.score.toFixed(0)}/${factor.maxScore}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Profitability Analysis -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">💰 Profitability Analysis - ${profitAnalysis.level}</div>
+                    <div class="rp-progress-bar">
+                        <div class="rp-progress-fill rp-progress-${getProfitClass(profitAnalysis.level)}" 
+                             style="width: ${profitAnalysis.profitScore}%"></div>
+                    </div>
+                    <div style="margin-top: 16px;">
+                        ${profitAnalysis.factors.map(factor => `
+                            <div class="rp-analyzer-data-row">
+                                <span class="rp-analyzer-label">${factor.metric}:</span>
+                                <span class="rp-analyzer-value rp-${factor.impact}">${factor.value}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Your Holdings -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">💼 Your Holdings</div>
+                    ${holdings.quantity > 0 ? `
+                        <div class="rp-metric-grid">
+                            <div class="rp-metric-item">
+                                <div class="rp-metric-title">Quantity</div>
+                                <div class="rp-metric-value">${formatNumberWithCommas(holdings.quantity.toFixed(6))}</div>
+                            </div>
+                            <div class="rp-metric-item">
+                                <div class="rp-metric-title">Avg Cost</div>
+                                <div class="rp-metric-value">${formatPrice(holdings.avgPrice)}</div>
+                            </div>
+                            <div class="rp-metric-item">
+                                <div class="rp-metric-title">Current Value</div>
+                                <div class="rp-metric-value">${formatNumberWithCommas((holdings.quantity * price).toFixed(2))}</div>
+                            </div>
+                            <div class="rp-metric-item">
+                                <div class="rp-metric-title">P&L</div>
+                                <div class="rp-metric-value ${profitLoss >= 0 ? 'rp-positive' : 'rp-negative'}">
+                                    ${profitLoss >= 0 ? '+' : ''}${formatNumberWithCommas(Math.abs(profitLoss).toFixed(2))}
+                                    (${profitLossPercent >= 0 ? '+' : ''}${profitLossPercent.toFixed(2)}%)
+                                </div>
+                            </div>
+                        </div>
+                    ` : `
+                        <p style="text-align: center; color: rgba(255,255,255,0.6); margin: 20px 0;">
+                            You don't have any holdings for this coin yet.
+                        </p>
+                    `}
+                    
+                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
+                        <h4 style="margin-bottom: 12px; color: #00d4ff;">➕ Add Transaction</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px;">
+                            <input type="number" class="rp-analyzer-input" id="rp-transaction-quantity" 
+                                   placeholder="Quantity (+buy/-sell)" style="margin-bottom: 0;">
+                            <input type="number" class="rp-analyzer-input" id="rp-transaction-price" 
+                                   placeholder="Price per coin" style="margin-bottom: 0;">
+                            <button class="rp-analyzer-button" onclick="addTransactionToPortfolio()" style="margin-bottom: 0;">
+                                ➕ Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical Indicators -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">📈 Technical Analysis</div>
+                    <div class="rp-metric-grid">
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Trend</div>
+                            <div class="rp-metric-value">${priceAnalysis.trend}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Volatility</div>
+                            <div class="rp-metric-value">${priceAnalysis.volatility ? priceAnalysis.volatility.toFixed(2) + '%' : 'N/A'}</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Momentum</div>
+                            <div class="rp-metric-value ${priceAnalysis.momentum >= 0 ? 'rp-positive' : 'rp-negative'}">
+                                ${priceAnalysis.momentum ? (priceAnalysis.momentum >= 0 ? '+' : '') + priceAnalysis.momentum.toFixed(2) + '%' : 'N/A'}
+                            </div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Volume/MC Ratio</div>
+                            <div class="rp-metric-value">${((coin.volume24h / coin.marketCap) * 100).toFixed(2)}%</div>
+                        </div>
+                    </div>
+                    <div class="rp-chart-placeholder">
+                        📊 Price Chart Placeholder - Advanced charting coming soon
+                    </div>
+                </div>
+
+                <!-- Holder Analysis -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">👥 Holder Distribution</div>
+                    <div class="rp-metric-grid">
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Top Holder</div>
+                            <div class="rp-metric-value">${securityAnalysis.holderAnalysis.topHolder.toFixed(2)}%</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Top 10 Holders</div>
+                            <div class="rp-metric-value">${securityAnalysis.holderAnalysis.top10Holders.toFixed(2)}%</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Pool Holdings</div>
+                            <div class="rp-metric-value">${securityAnalysis.holderAnalysis.poolPercentage.toFixed(3)}%</div>
+                        </div>
+                        <div class="rp-metric-item">
+                            <div class="rp-metric-title">Total Holders</div>
+                            <div class="rp-metric-value">${securityAnalysis.holderAnalysis.totalHolders}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Info -->
+                <div class="rp-analyzer-section">
+                    <div class="rp-analyzer-section-title">ℹ️ Project Information</div>
+                    <div class="rp-analyzer-data-row">
+                        <span class="rp-analyzer-label">Created:</span>
+                        <span class="rp-analyzer-value">${formatDate(coin.createdAt)}</span>
+                    </div>
+                    <div class="rp-analyzer-data-row">
+                        <span class="rp-analyzer-label">Creator:</span>
+                        <span class="rp-analyzer-value">${coin.creatorName}</span>
+                    </div>
+                    <div class="rp-analyzer-data-row">
+                        <span class="rp-analyzer-label">Age:</span>
+                        <span class="rp-analyzer-value">${Math.floor((new Date() - new Date(coin.createdAt)) / (1000 * 60 * 60 * 24))} days</span>
+                    </div>
+                </div>
+            `;
+
+            // Add transaction handler
+            window.addTransactionToPortfolio = () => {
+                const quantity = document.getElementById('rp-transaction-quantity').value;
+                const price = document.getElementById('rp-transaction-price').value;
+
+                if (!quantity || !price) {
+                    showNotification('Please enter both quantity and price', 'error');
+                    return;
+                }
+
+                addTransaction(symbol, quantity, price);
+                showNotification('Transaction added successfully', 'success');
+                setTimeout(() => updateAnalysisTab(), 500);
+            };
+
+        } catch (error) {
+            console.error('Error loading coin data:', error);
+            throw new Error('Failed to load coin data. Please check your API key and network connection.');
+        }
+    };
+
+    // ===========================
+    // Helper Functions
+    // ===========================
+
+    const getPredictionIcon = (trend) => {
+        const icons = {
+            'STRONG_UP': '🚀',
+            'UP': '📈',
+            'NEUTRAL': '↔️',
+            'DOWN': '📉',
+            'STRONG_DOWN': '💥',
+            'UNKNOWN': '❓'
+        };
+        return icons[trend] || '❓';
+    };
+
+    const getScoreClass = (score) => {
+        if (score >= 80) return 'excellent';
+        if (score >= 60) return 'good';
+        if (score >= 40) return 'neutral';
+        if (score >= 20) return 'poor';
+        return 'critical';
+    };
+
+    const getProfitClass = (level) => {
+        const classes = {
+            'EXCELLENT': 'excellent',
+            'GOOD': 'good',
+            'NEUTRAL': 'neutral',
+            'POOR': 'poor',
+            'VERY_POOR': 'critical'
+        };
+        return classes[level] || 'neutral';
+    };
+
+    const showNotification = (message, type = 'success') => {
+        const existingNotification = document.querySelector('.rp-notification');
+        if (existingNotification) existingNotification.remove();
+
+        const notification = document.createElement('div');
+        notification.className = `rp-notification rp-${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    };
+
+    const showConfirmModal = (title, message, onConfirm) => {
+        const existingModal = document.getElementById('rp-confirm-modal');
+        if (existingModal) existingModal.remove();
+
+        const modal = document.createElement('div');
+        modal.className = 'rp-modal-backdrop';
+        modal.id = 'rp-confirm-modal';
+        modal.innerHTML = `
+            <div class="rp-modal">
+                <div class="rp-modal-title">${title}</div>
+                <div class="rp-modal-content">
+                    <p>${message}</p>
+                </div>
+                <div class="rp-modal-actions">
+                    <button class="rp-analyzer-button" style="background: #555;" onclick="document.getElementById('rp-confirm-modal').remove()">Cancel</button>
+                    <button class="rp-analyzer-button rp-delete" onclick="confirmAction()">Confirm</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        window.confirmAction = () => {
+            try {
+                onConfirm();
+                modal.remove();
+            } catch (error) {
+                console.error('Error in confirmation action:', error);
+                showNotification('Error: ' + error.message, 'error');
+                modal.remove();
+            }
+        };
+    };
+
+    // Export/Import Functions
+    window.exportTransactions = () => {
         const portfolio = getPortfolio();
         const dataStr = JSON.stringify(portfolio, null, 2);
         const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-
-        const exportFileDefaultName = `rugplay_portfolio_${formatDateFilename(new Date())}.json`;
+        const exportFileDefaultName = `rugplay_portfolio_${new Date().toISOString().split('T')[0]}.json`;
 
         const linkElement = document.createElement('a');
         linkElement.setAttribute('href', dataUri);
         linkElement.setAttribute('download', exportFileDefaultName);
         linkElement.click();
 
-        showNotification('Portfolio data exported successfully', 'success');
+        showNotification('Portfolio exported successfully', 'success');
     };
 
-    // Format date for filename (YYYY-MM-DD format)
-    const formatDateFilename = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    // Show import modal
-    const showImportModal = () => {
-        const modalHTML = `
-            <div class="rp-modal-backdrop" id="rp-import-modal">
-                <div class="rp-modal">
-                    <div class="rp-modal-title">Import Portfolio Data</div>
-                    <div class="rp-modal-content">
-                        <p>Select a JSON file containing your exported portfolio data:</p>
-                        <input type="file" id="rp-import-file" accept=".json" class="rp-analyzer-input">
-                        <p style="color: #fa3; margin-top: 10px;">Warning: This will overwrite your current portfolio data!</p>
-                    </div>
-                    <div class="rp-modal-actions">
-                        <button class="rp-analyzer-button" id="rp-import-cancel" style="background-color: #555;">Cancel</button>
-                        <button class="rp-analyzer-button" id="rp-import-confirm">Import</button>
-                    </div>
+    window.showImportModal = () => {
+        const modal = document.createElement('div');
+        modal.className = 'rp-modal-backdrop';
+        modal.innerHTML = `
+            <div class="rp-modal">
+                <div class="rp-modal-title">📥 Import Portfolio Data</div>
+                <div class="rp-modal-content">
+                    <p>Select a JSON file containing your exported portfolio data:</p>
+                    <input type="file" id="rp-import-file" accept=".json" class="rp-analyzer-input">
+                    <p style="color: #ffa500; margin-top: 10px;">⚠️ This will overwrite your current portfolio data!</p>
+                </div>
+                <div class="rp-modal-actions">
+                    <button class="rp-analyzer-button" style="background: #555;" onclick="this.closest('.rp-modal-backdrop').remove()">Cancel</button>
+                    <button class="rp-analyzer-button" onclick="importPortfolioData()">Import</button>
                 </div>
             </div>
         `;
 
-        // Add modal to the document
-        const modalContainer = document.createElement('div');
-        modalContainer.innerHTML = modalHTML;
-        document.body.appendChild(modalContainer.firstChild);
+        document.body.appendChild(modal);
 
-        // Add event listeners
-        document.getElementById('rp-import-cancel').addEventListener('click', () => {
-            document.getElementById('rp-import-modal').remove();
-        });
-    setTimeout(() => {
-        setupTransactionTabEventListeners();
-    }, 100);
-        document.getElementById('rp-import-confirm').addEventListener('click', () => {
+        window.importPortfolioData = () => {
             const fileInput = document.getElementById('rp-import-file');
             if (fileInput.files.length === 0) {
                 showNotification('Please select a file to import', 'error');
@@ -1676,762 +2097,112 @@ const setupSettingsTabEventListeners = () => {
                 try {
                     const data = JSON.parse(e.target.result);
                     savePortfolio(data);
-                    showNotification('Portfolio data imported successfully', 'success');
-                    document.getElementById('rp-import-modal').remove();
-                    updateTransactionsTab();
+                    showNotification('Portfolio imported successfully', 'success');
+                    modal.remove();
+                    updatePortfolioTab();
                 } catch (error) {
                     showNotification('Error importing data: Invalid JSON format', 'error');
                 }
             };
 
             reader.readAsText(file);
-        });
+        };
     };
 
-
-    // Update settings tab
-    const updateSettingsTab = () => {
-        const content = document.getElementById('rp-analyzer-content');
-        const apiKey = getApiKey();
-
-        content.innerHTML = `
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">API Configuration</div>
-                <p>Enter your RugPlay API key to access market data:</p>
-
-                <div class="rp-settings-row">
-                    <div class="rp-settings-label">API Key:</div>
-                    <div class="rp-settings-value rp-api-key-input">
-                        <input type="password" class="rp-analyzer-input" id="rp-api-key"
-                            value="${apiKey}" placeholder="Enter your RugPlay API key here">
-                        <span class="rp-api-key-show" id="rp-toggle-key-visibility">👁️</span>
-                    </div>
-                </div>
-
-                <button class="rp-analyzer-button" id="rp-save-api-key">Save API Key</button>
-            </div>
-
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Portfolio Management</div>
-                <div class="rp-import-export">
-                    <div class="rp-import-export-title">Backup & Restore</div>
-                    <p>Export your portfolio data to a file or import from a previous backup:</p>
-                    <div class="rp-import-export-buttons">
-                        <button class="rp-analyzer-button" id="rp-export-portfolio">Export Portfolio</button>
-                        <button class="rp-analyzer-button" id="rp-import-portfolio">Import Portfolio</button>
-                    </div>
-                </div>
-
-                <div style="margin-top: 20px;">
-                    <button class="rp-analyzer-button rp-delete" id="rp-clear-portfolio">Clear Portfolio Data</button>
-                </div>
-            </div>
-
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">About</div>
-                <p>RugPlay Market Analyzer v1.3</p>
-                <p>Created by: seltonmt012</p>
-                <p>Last Updated: 2025-06-26</p>
-            </div>
-        `;
-
-        // Add event listeners
-        document.getElementById('rp-save-api-key').addEventListener('click', () => {
-            const key = document.getElementById('rp-api-key').value.trim();
-            if (!key) {
-                showNotification('API key cannot be empty', 'error');
-                return;
-            }
-
-            saveApiKey(key);
-            showNotification('API key saved successfully', 'success');
-
-            // Switch to coin tab
-            document.querySelector('[data-tab="coin"]').click();
-        });
-
-        document.getElementById('rp-toggle-key-visibility').addEventListener('click', () => {
-            const input = document.getElementById('rp-api-key');
-            if (input.type === 'password') {
-                input.type = 'text';
-                document.getElementById('rp-toggle-key-visibility').textContent = '🔒';
-            } else {
-                input.type = 'password';
-                document.getElementById('rp-toggle-key-visibility').textContent = '👁️';
-            }
-        });
-
-        document.getElementById('rp-export-portfolio').addEventListener('click', exportTransactions);
-
-        document.getElementById('rp-import-portfolio').addEventListener('click', () => {
-            showImportModal();
-        });
-
-        // Add this code for the "Clear Portfolio Data" button in the settings tab
-        document.getElementById('rp-clear-portfolio').addEventListener('click', () => {
-            showConfirmModal(
-            'Clear Portfolio Data',
-            'Are you sure you want to clear all portfolio data? This will delete all your transactions and cannot be undone.',
-            () => {
-                try {
-                console.log('Clearing portfolio data...');
-
-                // Save an empty object as the portfolio
-                savePortfolio({});
-
-                console.log('Portfolio data cleared');
-                showNotification('Portfolio data cleared successfully', 'success');
-
-                // Force update the UI
-                setTimeout(() => {
-                    updatePortfolioTab();
-                    showNotification('UI updated with empty portfolio', 'success');
-                }, 500);
-                } catch (error) {
-                console.error('Error clearing portfolio:', error);
-                showNotification('Error clearing portfolio: ' + error.message, 'error');
-                }
-            }
-            );
-        });
-    };
-
-    // Update portfolio tab content
-    const updatePortfolioTab = () => {
-        const content = document.getElementById('rp-analyzer-content');
-        const portfolio = getPortfolio();
-        const coins = Object.keys(portfolio);
-
-        if (coins.length === 0) {
-            content.innerHTML = `
-                <div class="rp-empty-state">
-                    <div class="rp-empty-state-icon">💼</div>
-                    <div>Your Portfolio is Empty</div>
-                    <p>You haven't added any coins to your portfolio yet.</p>
-                    <p>Go to a coin page and add a transaction to get started.</p>
-                </div>
-            `;
-            return;
-        }
-
-        let portfolioHTML = `
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Your Portfolio</div>
-                <table class="rp-transaction-table">
-                    <thead>
-                        <tr>
-                            <th>Coin</th>
-                            <th>Quantity</th>
-                            <th>Avg Price</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-
-        coins.forEach(symbol => {
-            const holdings = calculateHoldings(symbol);
-            if (holdings.quantity > 0) {
-                portfolioHTML += `
-                    <tr>
-                        <td>${symbol}</td>
-                        <td>${formatNumberWithCommas(holdings.quantity.toFixed(6))}</td>
-                        <td>$${formatPrice(holdings.avgPrice)}</td>
-                        <td>
-                            <button class="rp-analyzer-button" data-symbol="${symbol}" data-action="view">View</button>
-                        </td>
-                    </tr>
-                `;
-            }
-        });
-
-        portfolioHTML += `
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Transaction History</div>
-                <select class="rp-analyzer-input" id="rp-transaction-coin">
-                    <option value="">Select a coin</option>
-                    ${coins.map(symbol => `<option value="${symbol}">${symbol}</option>`).join('')}
-                </select>
-
-                <div id="rp-transaction-history">
-                    <p>Select a coin to view transaction history</p>
-                </div>
-            </div>
-        `;
-
-        content.innerHTML = portfolioHTML;
-
-        // Add event listeners
-        document.querySelectorAll('[data-action="view"]').forEach(button => {
-            button.addEventListener('click', () => {
-                const symbol = button.dataset.symbol;
-                currentCoin = symbol;
-
-                // Switch to coin tab and load data
-                document.querySelector('[data-tab="coin"]').click();
-            });
-        });
-
-        document.getElementById('rp-transaction-coin').addEventListener('change', (e) => {
-            const symbol = e.target.value;
-            if (!symbol) return;
-
-            const portfolio = getPortfolio();
-            const coinData = portfolio[symbol];
-
-            if (!coinData || !coinData.transactions || coinData.transactions.length === 0) {
-                document.getElementById('rp-transaction-history').innerHTML = `<p>No transactions found for ${symbol}</p>`;
-                return;
-            }
-
-            let transactionsHTML = `
-                <table class="rp-transaction-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Total</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            coinData.transactions.forEach(tx => {
-                transactionsHTML += `
-                    <tr>
-                        <td>${formatDate(tx.date)}</td>
-                        <td>${tx.type.toUpperCase()}</td>
-                        <td>${formatNumberWithCommas(Math.abs(tx.quantity).toFixed(6))}</td>
-                        <td>$${formatPrice(tx.price)}</td>
-                        <td>$${formatNumberWithCommas((Math.abs(tx.quantity) * tx.price).toFixed(2))}</td>
-                        <td>
-                            <button class="rp-analyzer-button rp-delete"
-                                data-symbol="${symbol}"
-                                data-txid="${tx.id}"
-                                data-action="delete-coin-tx">Delete</button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            transactionsHTML += `
-                    </tbody>
-                </table>
-            `;
-            document.getElementById('rp-transaction-history').innerHTML = transactionsHTML;
-    setTimeout(() => {
-        setupSettingsTabEventListeners();
-    }, 100);
-            // Enhanced transaction deletion handler for coin transactions
-            document.querySelectorAll('[data-action="delete-coin-tx"]').forEach(button => {
-                button.addEventListener('click', () => {
-                    const symbol = button.dataset.symbol;
-                    const txId = button.dataset.txid;
-
-                    console.log(`Delete button clicked for ${symbol} transaction ${txId}`);
-
-                    showConfirmModal(
-                        'Delete Transaction',
-                        `Are you sure you want to delete this ${symbol} transaction? This action cannot be undone.`,
-                        () => {
-                            console.log(`Confirmed deletion of ${symbol} transaction ${txId}`);
-
-                            const success = deleteTransaction(symbol, txId);
-
-                            if (success) {
-                                showNotification('Transaction deleted successfully', 'success');
-                                // Refresh the transaction history
-                                console.log('Refreshing transaction view...');
-
-                                // Use setTimeout to ensure the DOM updates
-                                setTimeout(() => {
-                                    try {
-                                        document.getElementById('rp-transaction-coin').dispatchEvent(new Event('change'));
-                                        // Also update portfolio display
-                                        updatePortfolioTab();
-                                    } catch (error) {
-                                        console.error('Error refreshing view:', error);
-                                        showNotification('Error refreshing view: ' + error.message, 'error');
-                                    }
-                                }, 500);
-                            } else {
-                                showNotification('Failed to delete transaction - check console for details', 'error');
-                            }
-                        }
-                    );
-                });
-            });
-        });
-    };
-
-// Update search tab content
-const updateSearchTab = () => {
-    const content = document.getElementById('rp-analyzer-content');
-
-    content.innerHTML = `
-        <div class="rp-analyzer-section">
-            <div class="rp-analyzer-section-title">Search Coins</div>
-            <input type="text" class="rp-analyzer-input" id="rp-search-input" placeholder="Enter coin name or symbol">
-            <button class="rp-analyzer-button" id="rp-search-button">Search</button>
-        </div>
-
-        <div id="rp-search-results">
-            <!-- Results will appear here -->
-        </div>
-    `;
-
-    document.getElementById('rp-search-button').addEventListener('click', performSearch);
-    document.getElementById('rp-search-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            performSearch();
-        }
-    });
-};
-
-// Perform search and display results
-const performSearch = async () => {
-    const searchTerm = document.getElementById('rp-search-input').value.trim();
-    if (!searchTerm) {
-        showNotification('Please enter a search term', 'error');
-        return;
-    }
-
-    const resultsContainer = document.getElementById('rp-search-results');
-    resultsContainer.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <div style="width: 40px; height: 40px; margin: 0 auto; border: 4px solid #333; border-top: 4px solid #0df; border-radius: 50%; animation: rp-spin 1s linear infinite;"></div>
-            <p style="margin-top: 15px;">Searching for "${searchTerm}"...</p>
-        </div>
-    `;
-
-    try {
-        const results = await searchCoins(searchTerm);
-
-        if (!results.coins || results.coins.length === 0) {
-            resultsContainer.innerHTML = `
-                <div class="rp-empty-state">
-                    <div class="rp-empty-state-icon">🔍</div>
-                    <div>No Results Found</div>
-                    <p>No coins found matching "${searchTerm}".</p>
-                    <p>Try a different search term.</p>
-                </div>
-            `;
-            return;
-        }
-
-        let resultsHTML = `
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Search Results (${results.coins.length})</div>
-                <table class="rp-transaction-table">
-                    <thead>
-                        <tr>
-                            <th>Coin</th>
-                            <th>Price</th>
-                            <th>24h Change</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-
-        results.coins.forEach(coin => {
-            const changePercent = (coin.change24h / (coin.currentPrice - coin.change24h) * 100).toFixed(2);
-            const direction = changePercent >= 0 ? 'positive' : 'negative';
-
-            resultsHTML += `
-                <tr>
-                    <td>${coin.name} (${coin.symbol})</td>
-                    <td>$${formatPrice(coin.currentPrice)}</td>
-                    <td class="rp-${direction}">
-                        ${changePercent >= 0 ? '+' : ''}${changePercent}%
-                    </td>
-                    <td>
-                        <button class="rp-analyzer-button" data-symbol="${coin.symbol}" data-action="view-search">View</button>
-                    </td>
-                </tr>
-            `;
-        });
-
-        resultsHTML += `
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        resultsContainer.innerHTML = resultsHTML;
-
-        // Add event listeners to the View buttons
-        document.querySelectorAll('[data-action="view-search"]').forEach(button => {
-            button.addEventListener('click', () => {
-                const symbol = button.dataset.symbol;
-                currentCoin = symbol;
-
-                // Switch to coin tab and load data
-                document.querySelector('[data-tab="coin"]').click();
-            });
-        });
-
-    } catch (error) {
-        console.error('Search error:', error);
-        resultsContainer.innerHTML = `
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Error</div>
-                <p style="color: #f55;">Error searching for coins: ${error}</p>
-                <button class="rp-analyzer-button" id="rp-retry-search">Retry</button>
-            </div>
-        `;
-
-        document.getElementById('rp-retry-search').addEventListener('click', performSearch);
-    }
-};
-
-// Current coin being viewed
-let currentCoin = null;
-let currentCoinData = null;
-let currentHoldersData = null;
-
-// Load coin data from API
-const loadCoinData = async (symbol) => {
-    try {
-        // Fetch both coin data and holders data
-        const [coinData, holdersData] = await Promise.all([
-            fetchCoinData(symbol),
-            fetchCoinHolders(symbol)
-        ]);
-
-        currentCoin = symbol;
-        currentCoinData = coinData;
-        currentHoldersData = holdersData;
-
-        // Get portfolio data for this coin
-        const holdings = calculateHoldings(symbol);
-
-        const content = document.getElementById('rp-analyzer-content');
-
-        const coin = coinData.coin;
-        const price = coin.currentPrice;
-        const change24h = coin.change24h;
-        const changePercent = (change24h / (price - change24h) * 100).toFixed(2);
-        const direction = changePercent >= 0 ? 'positive' : 'negative';
-
-        // Calculate profit/loss if user has holdings
-        let profitLoss = 0;
-        let profitLossPercent = 0;
-
-        if (holdings.quantity > 0) {
-            profitLoss = holdings.quantity * (price - holdings.avgPrice);
-            profitLossPercent = ((price / holdings.avgPrice) - 1) * 100;
-        }
-
-        // Analyze price trend
-        const priceAnalysis = analyzePrice(coinData.candlestickData);
-
-        // Analyze risk
-        const riskAnalysis = analyzeRisk(coinData, holdersData);
-
-        // Prepare UI
-        content.innerHTML = `
-            <div class="rp-prediction rp-${priceAnalysis.trend.toLowerCase()}">
-                🔮 PREDICTION: ${priceAnalysis.trend} - ${priceAnalysis.message}
-            </div>
-
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">${coin.name} (${coin.symbol})</div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Current Price:</span>
-                    <span class="rp-analyzer-value">$${formatPrice(price)}</span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">24h Change:</span>
-                    <span class="rp-analyzer-value rp-${direction}">
-                        ${changePercent >= 0 ? '+' : ''}${changePercent}%
-                        ($${formatPrice(Math.abs(change24h))})
-                    </span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Market Cap:</span>
-                    <span class="rp-analyzer-value">$${formatNumber(coin.marketCap)}</span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">24h Volume:</span>
-                    <span class="rp-analyzer-value">$${formatNumber(coin.volume24h)}</span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Circulating Supply:</span>
-                    <span class="rp-analyzer-value">${formatNumberWithCommas(coin.circulatingSupply)} ${coin.symbol}</span>
-                </div>
-            </div>
-
-            <div class="rp-risk-analysis">
-                <div class="rp-risk-title rp-risk-${riskAnalysis.riskLevel.toLowerCase()}">
-                    ⚠️ RUGPULL RISK: ${riskAnalysis.riskLevel} -
-                    ${riskAnalysis.factors.map(f => f.factor + ` (+${f.score}%)`).join('; ')}
-                </div>
-
-                <div style="margin-top: 10px; margin-bottom: 15px;">
-                    <div style="font-weight: bold; margin-bottom: 5px;">📋 RISK BREAKDOWN:</div>
-                    ${riskAnalysis.factors.map(factor =>
-                        `   ${factor.factor} (+${factor.score}%)`
-                    ).join('<br>')}
-                </div>
-
-                <div style="margin-bottom: 15px;">
-                    <div style="font-weight: bold; margin-bottom: 5px;">🏆 HOLDER ANALYSIS:</div>
-                    ${riskAnalysis.holderAnalysis ? `
-                        Top Holder: ${riskAnalysis.holderAnalysis.topHolder.toFixed(2)}%<br>
-                        Top 5 Holders: ${riskAnalysis.holderAnalysis.top5Holders.toFixed(2)}%<br>
-                        Pool Health: ${riskAnalysis.holderAnalysis.poolPercentage.toFixed(3)}% of supply
-                    ` : 'Holder data not available'}
-                </div>
-
-                <div class="rp-recommendation rp-risk-${riskAnalysis.riskLevel.toLowerCase()}">
-                    <div style="font-weight: bold; margin-bottom: 5px;">💡 RECOMMENDATION:</div>
-                    ${riskAnalysis.recommendation}
-                </div>
-            </div>
-
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Your Holdings</div>
-
-                ${holdings.quantity > 0 ? `
-                    <div class="rp-analyzer-data-row">
-                        <span class="rp-analyzer-label">Quantity:</span>
-                        <span class="rp-analyzer-value">${formatNumberWithCommas(holdings.quantity)} ${coin.symbol}</span>
-                    </div>
-
-                    <div class="rp-analyzer-data-row">
-                        <span class="rp-analyzer-label">Average Cost:</span>
-                        <span class="rp-analyzer-value">$${formatPrice(holdings.avgPrice)}</span>
-                    </div>
-
-                    <div class="rp-analyzer-data-row">
-                        <span class="rp-analyzer-label">Current Value:</span>
-                        <span class="rp-analyzer-value">$${formatNumberWithCommas((holdings.quantity * price).toFixed(2))}</span>
-                    </div>
-
-                    <div class="rp-analyzer-data-row">
-                        <span class="rp-analyzer-label">Profit/Loss:</span>
-                        <span class="rp-analyzer-value rp-${profitLoss >= 0 ? 'positive' : 'negative'}">
-                            ${profitLoss >= 0 ? '+' : ''}$${formatNumberWithCommas(profitLoss.toFixed(2))}
-                            (${profitLossPercent >= 0 ? '+' : ''}${profitLossPercent.toFixed(2)}%)
-                        </span>
-                    </div>
-                ` : `
-                    <p>You don't have any holdings for this coin yet.</p>
-                `}
-
-                <div style="margin-top: 15px;">
-                    <div class="rp-analyzer-section-title">Add Transaction</div>
-                    <input type="number" class="rp-analyzer-input" id="rp-transaction-quantity" placeholder="Quantity (positive for buy, negative for sell)">
-                    <input type="number" class="rp-analyzer-input" id="rp-transaction-price" placeholder="Price per coin in USD">
-                    <button class="rp-analyzer-button" id="rp-add-transaction">Add Transaction</button>
-                </div>
-            </div>
-
-            <div class="rp-analyzer-section">
-                <div class="rp-analyzer-section-title">Market Analysis</div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Volume/Market Cap Ratio:</span>
-                    <span class="rp-analyzer-value">${(coin.volume24h / coin.marketCap * 100).toFixed(2)}%</span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Liquidity:</span>
-                    <span class="rp-analyzer-value">$${formatNumber(coin.poolBaseCurrencyAmount)}</span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Created:</span>
-                    <span class="rp-analyzer-value">${formatDate(coin.createdAt)}</span>
-                </div>
-
-                <div class="rp-analyzer-data-row">
-                    <span class="rp-analyzer-label">Creator:</span>
-                    <span class="rp-analyzer-value">${coin.creatorName}</span>
-                </div>
-            </div>
-        `;
-
-        // Add event listener for the transaction button
-        document.getElementById('rp-add-transaction').addEventListener('click', () => {
-            const quantity = document.getElementById('rp-transaction-quantity').value;
-            const price = document.getElementById('rp-transaction-price').value;
-
-            if (!quantity || !price) {
-                showNotification('Please enter both quantity and price', 'error');
-                return;
-            }
-
-            addTransaction(symbol, quantity, price);
-            showNotification('Transaction added successfully', 'success');
-            updateCoinTab(); // Refresh the UI
-        });
-
-    } catch (error) {
-        console.error('Error loading coin data:', error);
-        throw new Error('Failed to load coin data. Please check your API key and network connection.');
-    }
-};
-
-// Show notification
-const showNotification = (message, type = 'success') => {
-    // Remove existing notification if present
-    const existingNotification = document.querySelector('.rp-notification');
-    if (existingNotification) {
-        existingNotification.remove();
-    }
-
-    // Create notification
-    const notification = document.createElement('div');
-    notification.className = `rp-notification rp-${type}`;
-    notification.textContent = message;
-
-    document.body.appendChild(notification);
-
-    // Auto remove after 3 seconds
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        setTimeout(() => {
-            notification.remove();
-        }, 300);
-    }, 3000);
-};
-
-    // Show confirmation modal
-
-// ===========================
-// Utility Functions
-// ===========================
-
-// Format price with appropriate decimal places
-const formatPrice = (price) => {
-    if (price >= 1000) {
-        return price.toFixed(2);
-    } else if (price >= 1) {
-        return price.toFixed(4);
-    } else if (price >= 0.01) {
-        return price.toFixed(5);
-    } else if (price >= 0.0001) {
-        return price.toFixed(6);
-    } else if (price >= 0.000001) {
-        return price.toFixed(8);
-    } else {
+    // Utility Functions
+    const formatPrice = (price) => {
+        if (price >= 1000) return price.toFixed(2);
+        if (price >= 1) return price.toFixed(4);
+        if (price >= 0.01) return price.toFixed(5);
+        if (price >= 0.0001) return price.toFixed(6);
+        if (price >= 0.000001) return price.toFixed(8);
         return price.toExponential(4);
-    }
-};
+    };
 
-// Format large numbers with suffix
-const formatNumber = (num) => {
-    if (num >= 1e9) {
-        return (num / 1e9).toFixed(2) + 'B';
-    } else if (num >= 1e6) {
-        return (num / 1e6).toFixed(2) + 'M';
-    } else if (num >= 1e3) {
-        return (num / 1e3).toFixed(2) + 'K';
-    } else {
+    const formatNumber = (num) => {
+        if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+        if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+        if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
         return num.toFixed(2);
+    };
+
+    const formatNumberWithCommas = (num) => {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    };
+
+    const formatDate = (dateString) => {
+        return new Date(dateString).toLocaleString();
+    };
+
+    const getCoinFromUrl = () => {
+        const url = window.location.href;
+        const coinMatch = url.match(/\/coin\/([A-Z0-9]+)/i);
+        return coinMatch ? coinMatch[1] : null;
+    };
+
+    const updateUI = () => {
+        const activeTab = document.querySelector('.rp-analyzer-tab.active');
+        if (activeTab) switchTab(activeTab);
+    };
+
+    // ===========================
+    // Initialization
+    // ===========================
+
+    const init = () => {
+        addStyles();
+
+        if (window.location.hostname.includes('rugplay.com')) {
+            createUI();
+
+            if (!document.getElementById('rp-toggle-button')) {
+                createToggleButton();
+            }
+
+            const symbol = getCoinFromUrl();
+            if (symbol) {
+                currentCoin = symbol;
+                setTimeout(() => {
+                    const container = document.getElementById('rp-analyzer-container');
+                    if (container && container.style.display === 'none') {
+                        toggleAnalyzer();
+                    }
+                }, 1000);
+            }
+
+            // URL change detection
+            let lastUrl = location.href;
+            new MutationObserver(() => {
+                const url = location.href;
+                if (url !== lastUrl) {
+                    lastUrl = url;
+                    if (!document.getElementById('rp-toggle-button')) {
+                        createToggleButton();
+                    }
+                    const newSymbol = getCoinFromUrl();
+                    if (newSymbol && newSymbol !== currentCoin) {
+                        currentCoin = newSymbol;
+                        if (document.getElementById('rp-analyzer-container').style.display !== 'none') {
+                            updateAnalysisTab();
+                        }
+                    }
+                }
+            }).observe(document, {subtree: true, childList: true});
+        }
+    };
+
+    // Start the application
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
     }
-};
-// Format numbers with commas
-const formatNumberWithCommas = (num) => {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-};
 
-// Format date
-const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
-};
-
-// Update UI (general purpose refresh)
-const updateUI = () => {
-    // Get active tab
-    const activeTab = document.querySelector('.rp-analyzer-tab.active');
-    if (activeTab) {
-        switchTab(activeTab);
-    }
-};
-
-// ===========================
-// Initialization
-// ===========================
-
-// Initialize the script
-const init = () => {
-    // Add styles first
-    addStyles();
-
-    // Check if we're on a RugPlay page
-    if (window.location.hostname.includes('rugplay.com')) {
-        createUI();
-
-        // Ensure the toggle button exists (to fix the disappearing button issue)
+    // Ensure toggle button always exists
+    setInterval(() => {
         if (!document.getElementById('rp-toggle-button')) {
             createToggleButton();
         }
+    }, 5000);
 
-        // Auto-detect coin from URL
-        const symbol = getCoinFromUrl();
-        if (symbol) {
-            currentCoin = symbol;
-
-            // Auto-open analyzer when on a coin page
-            setTimeout(() => {
-                const container = document.getElementById('rp-analyzer-container');
-                if (container && container.style.display === 'none') {
-                    toggleAnalyzer();
-                }
-            }, 1000);
-        }
-
-        // Set up mutation observer to detect URL changes (for single-page apps)
-        let lastUrl = location.href;
-        new MutationObserver(() => {
-            const url = location.href;
-            if (url !== lastUrl) {
-                lastUrl = url;
-
-                // Make sure the toggle button is always visible
-                if (!document.getElementById('rp-toggle-button')) {
-                    createToggleButton();
-                }
-
-                const newSymbol = getCoinFromUrl();
-                if (newSymbol && newSymbol !== currentCoin) {
-                    currentCoin = newSymbol;
-                    if (document.getElementById('rp-analyzer-container').style.display !== 'none') {
-                        updateCoinTab();
-                    }
-                }
-            }
-        }).observe(document, {subtree: true, childList: true});
-    }
-};
-
-// Start the script when the page is fully loaded
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
-
-// Add a periodic check to ensure the toggle button always exists
-setInterval(() => {
-    if (!document.getElementById('rp-toggle-button')) {
-        createToggleButton();
-    }
-}, 5000);
-    })();
+})();
