@@ -528,7 +528,7 @@
     const addStyles = () => {
         GM_addStyle(`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-            
+
             .rp-analyzer {
                 position: fixed;
                 top: 20px;
@@ -1100,11 +1100,11 @@
                     right: 2.5%;
                     max-height: 85vh;
                 }
-                
+
                 .rp-score-card {
                     grid-template-columns: repeat(2, 1fr);
                 }
-                
+
                 .rp-metric-grid {
                     grid-template-columns: 1fr;
                 }
@@ -1376,7 +1376,10 @@
                         <td>${formatPrice(holdings.avgPrice)}</td>
                         <td>${formatNumberWithCommas(costBasis.toFixed(2))}</td>
                         <td>
-                            <button class="rp-analyzer-button" onclick="viewCoin('${symbol}')">
+                            <button class="rp-analyzer-button"
+                                    data-symbol="${symbol}"
+                                    data-action="analyze"
+                                    style="padding: 6px 12px; font-size: 12px;">
                                 🔍 Analyze
                             </button>
                         </td>
@@ -1393,17 +1396,16 @@
 
         content.innerHTML = portfolioHTML;
 
-        // Add global function for viewing coins
-        window.viewCoin = (symbol) => {
-            currentCoin = symbol;
-            document.querySelector('[data-tab="analysis"]').click();
-        };
+        // Setup event listeners for this tab
+        setTimeout(() => {
+            addEventListeners();
+        }, 100);
     };
 
     const updateTransactionsTab = () => {
         const content = document.getElementById('rp-analyzer-content');
         const portfolio = getPortfolio();
-        
+
         let allTransactions = [];
         Object.keys(portfolio).forEach(symbol => {
             if (portfolio[symbol].transactions) {
@@ -1436,12 +1438,12 @@
         content.innerHTML = `
             <div class="rp-analyzer-section">
                 <div class="rp-analyzer-section-title">📝 Transaction History</div>
-                
+
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div>Total: <strong>${allTransactions.length}</strong> transactions</div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="rp-analyzer-button" onclick="exportTransactions()">📤 Export</button>
-                        <button class="rp-analyzer-button" onclick="showImportModal()">📥 Import</button>
+                        <button class="rp-analyzer-button" id="rp-export-btn">📤 Export</button>
+                        <button class="rp-analyzer-button" id="rp-import-btn">📥 Import</button>
                     </div>
                 </div>
 
@@ -1488,81 +1490,20 @@
             </div>
         `;
 
-        // Add global functions
-        window.changePage = (page) => {
-            transactionsCurrentPage = page;
-            updateTransactionsTab();
-        };
-
-        window.deleteTransactionConfirm = (symbol, txId) => {
-            showConfirmModal(
-                '🗑️ Delete Transaction',
-                `Are you sure you want to delete this ${symbol} transaction?`,
-                () => {
-                    if (deleteTransaction(symbol, txId)) {
-                        showNotification('Transaction deleted successfully', 'success');
-                        updateTransactionsTab();
-                    } else {
-                        showNotification('Failed to delete transaction', 'error');
-                    }
-                }
-            );
-        };
-
-        // Direct delete function without confirmation for quick deletion
-        window.deleteTransactionNow = (symbol, txId) => {
-            const button = document.querySelector(`[data-symbol="${symbol}"][data-txid="${txId}"]`);
-            if (button) {
-                button.innerHTML = '⏳ Deleting...';
-                button.disabled = true;
-                button.style.background = 'linear-gradient(135deg, #ffa500, #ff8c00)';
-            }
-
-            try {
-                if (deleteTransaction(symbol, txId)) {
-                    showNotification(`✅ ${symbol} transaction deleted`, 'success');
-                    
-                    // Remove the row immediately for instant feedback
-                    const row = button ? button.closest('tr') : null;
-                    if (row) {
-                        row.style.background = 'rgba(255, 71, 87, 0.2)';
-                        row.style.transition = 'all 0.3s ease';
-                        setTimeout(() => {
-                            row.remove();
-                            // Update the whole tab after visual feedback
-                            setTimeout(() => updateTransactionsTab(), 200);
-                        }, 300);
-                    } else {
-                        updateTransactionsTab();
-                    }
-                } else {
-                    showNotification('❌ Failed to delete transaction', 'error');
-                    if (button) {
-                        button.innerHTML = '🗑️ Delete';
-                        button.disabled = false;
-                        button.style.background = 'linear-gradient(135deg, #ff4757, #ff3742)';
-                    }
-                }
-            } catch (error) {
-                console.error('Error deleting transaction:', error);
-                showNotification('❌ Error deleting transaction', 'error');
-                if (button) {
-                    button.innerHTML = '🗑️ Delete';
-                    button.disabled = false;
-                    button.style.background = 'linear-gradient(135deg, #ff4757, #ff3742)';
-                }
-            }
-        };
+        // Setup event listeners for this tab
+        setTimeout(() => {
+            addEventListeners();
+        }, 100);
     };
 
     const updateSearchTab = () => {
         const content = document.getElementById('rp-analyzer-content');
-        
+
         content.innerHTML = `
             <div class="rp-analyzer-section">
                 <div class="rp-analyzer-section-title">🔎 Search Coins</div>
                 <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                    <input type="text" class="rp-analyzer-input" id="rp-search-input" 
+                    <input type="text" class="rp-analyzer-input" id="rp-search-input"
                            placeholder="Enter coin name or symbol..." style="margin-bottom: 0; flex: 1;">
                     <button class="rp-analyzer-button" onclick="performSearch()">🔍 Search</button>
                 </div>
@@ -1591,7 +1532,7 @@
 
             try {
                 const results = await searchCoins(searchTerm);
-                
+
                 if (!results.coins || results.coins.length === 0) {
                     resultsContainer.innerHTML = `
                         <div class="rp-empty-state">
@@ -1629,7 +1570,9 @@
                                             </td>
                                             <td>${formatNumber(coin.marketCap)}</td>
                                             <td>
-                                                <button class="rp-analyzer-button" onclick="analyzeCoin('${coin.symbol}')">
+                                                <button class="rp-analyzer-button"
+                                                        data-symbol="${coin.symbol}"
+                                                        data-action="analyze-coin">
                                                     🔍 Analyze
                                                 </button>
                                             </td>
@@ -1641,11 +1584,13 @@
                     </div>
                 `;
 
-                window.analyzeCoin = (symbol) => {
-                    currentCoin = symbol;
-                    document.querySelector('[data-tab="analysis"]').click();
-                };
+                // Remove the old global function
+                if (window.analyzeCoin) delete window.analyzeCoin;
 
+                // Setup event listeners for this tab
+                setTimeout(() => {
+                    addEventListeners();
+                }, 100);
             } catch (error) {
                 resultsContainer.innerHTML = `
                     <div class="rp-analyzer-section">
@@ -1668,15 +1613,15 @@
                 <p style="margin-bottom: 16px; color: rgba(255, 255, 255, 0.8);">
                     Enter your RugPlay API key to access comprehensive market data
                 </p>
-                
+
                 <div style="position: relative;">
                     <input type="password" class="rp-analyzer-input" id="rp-api-key"
                            value="${apiKey}" placeholder="Enter your RugPlay API key...">
-                    <button class="rp-analyzer-button" id="rp-toggle-key-visibility" 
+                    <button class="rp-analyzer-button" id="rp-toggle-key-visibility"
                             style="position: absolute; right: 8px; top: 8px; padding: 8px;">👁️</button>
                 </div>
-                
-                <button class="rp-analyzer-button" onclick="saveApiKey()">💾 Save API Key</button>
+
+                <button class="rp-analyzer-button" id="rp-save-api-btn">💾 Save API Key</button>
             </div>
 
             <div class="rp-analyzer-section">
@@ -1684,11 +1629,11 @@
                 <p style="margin-bottom: 16px; color: rgba(255, 255, 255, 0.8);">
                     Backup and restore your portfolio data
                 </p>
-                
+
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <button class="rp-analyzer-button" onclick="exportTransactions()">📤 Export Portfolio</button>
-                    <button class="rp-analyzer-button" onclick="showImportModal()">📥 Import Portfolio</button>
-                    <button class="rp-analyzer-button rp-delete" onclick="clearPortfolioConfirm()">🗑️ Clear All Data</button>
+                    <button class="rp-analyzer-button" id="rp-export-portfolio-btn">📤 Export Portfolio</button>
+                    <button class="rp-analyzer-button" id="rp-import-portfolio-btn">📥 Import Portfolio</button>
+                    <button class="rp-analyzer-button rp-delete" id="rp-clear-portfolio-btn">🗑️ Clear All Data</button>
                 </div>
             </div>
 
@@ -1715,7 +1660,7 @@
             </div>
         `;
 
-        // Event listeners
+        // Event listeners for settings tab
         document.getElementById('rp-toggle-key-visibility').addEventListener('click', () => {
             const input = document.getElementById('rp-api-key');
             const button = document.getElementById('rp-toggle-key-visibility');
@@ -1728,30 +1673,27 @@
             }
         });
 
-        window.saveApiKey = () => {
-            const key = document.getElementById('rp-api-key').value.trim();
-            if (!key) {
-                showNotification('API key cannot be empty', 'error');
-                return;
-            }
-            saveApiKey(key);
-            showNotification('API key saved successfully', 'success');
-            setTimeout(() => {
-                document.querySelector('[data-tab="analysis"]').click();
-            }, 1000);
-        };
+        // Additional settings buttons
+        const exportPortfolioBtn = document.getElementById('rp-export-portfolio-btn');
+        if (exportPortfolioBtn) {
+            exportPortfolioBtn.addEventListener('click', () => {
+                console.log('📤 Export portfolio button clicked');
+                exportTransactions();
+            });
+        }
 
-        window.clearPortfolioConfirm = () => {
-            showConfirmModal(
-                '🗑️ Clear All Data',
-                'This will permanently delete all your portfolio data and transactions. This action cannot be undone.',
-                () => {
-                    savePortfolio({});
-                    showNotification('Portfolio data cleared successfully', 'success');
-                    updatePortfolioTab();
-                }
-            );
-        };
+        const importPortfolioBtn = document.getElementById('rp-import-portfolio-btn');
+        if (importPortfolioBtn) {
+            importPortfolioBtn.addEventListener('click', () => {
+                console.log('📥 Import portfolio button clicked');
+                showImportModal();
+            });
+        }
+
+        // Setup main event listeners
+        setTimeout(() => {
+            addEventListeners();
+        }, 100);
     };
 
     // ===========================
@@ -1864,7 +1806,7 @@
                     <div class="rp-risk-title">🛡️ Security Analysis - ${securityAnalysis.level}</div>
                     <div style="margin-bottom: 16px;">
                         <div class="rp-progress-bar">
-                            <div class="rp-progress-fill rp-progress-${getScoreClass(securityAnalysis.securityScore)}" 
+                            <div class="rp-progress-fill rp-progress-${getScoreClass(securityAnalysis.securityScore)}"
                                  style="width: ${securityAnalysis.securityScore}%"></div>
                         </div>
                         <div style="text-align: center; margin-top: 8px; font-weight: 600;">
@@ -1885,7 +1827,7 @@
                 <div class="rp-analyzer-section">
                     <div class="rp-analyzer-section-title">⚡ Activity Analysis - ${activityAnalysis.level}</div>
                     <div class="rp-progress-bar">
-                        <div class="rp-progress-fill rp-progress-${getScoreClass(activityAnalysis.activityScore)}" 
+                        <div class="rp-progress-fill rp-progress-${getScoreClass(activityAnalysis.activityScore)}"
                              style="width: ${activityAnalysis.activityScore}%"></div>
                     </div>
                     <div class="rp-metric-grid" style="margin-top: 16px;">
@@ -1905,7 +1847,7 @@
                 <div class="rp-analyzer-section">
                     <div class="rp-analyzer-section-title">💰 Profitability Analysis - ${profitAnalysis.level}</div>
                     <div class="rp-progress-bar">
-                        <div class="rp-progress-fill rp-progress-${getProfitClass(profitAnalysis.level)}" 
+                        <div class="rp-progress-fill rp-progress-${getProfitClass(profitAnalysis.level)}"
                              style="width: ${profitAnalysis.profitScore}%"></div>
                     </div>
                     <div style="margin-top: 16px;">
@@ -1948,13 +1890,13 @@
                             You don't have any holdings for this coin yet.
                         </p>
                     `}
-                    
+
                     <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
                         <h4 style="margin-bottom: 12px; color: #00d4ff;">➕ Add Transaction</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px;">
-                            <input type="number" class="rp-analyzer-input" id="rp-transaction-quantity" 
+                            <input type="number" class="rp-analyzer-input" id="rp-transaction-quantity"
                                    placeholder="Quantity (+buy/-sell)" style="margin-bottom: 0;" step="any">
-                            <input type="number" class="rp-analyzer-input" id="rp-transaction-price" 
+                            <input type="number" class="rp-analyzer-input" id="rp-transaction-price"
                                    placeholder="Price per coin" style="margin-bottom: 0;" step="any">
                             <button class="rp-analyzer-button" id="rp-add-transaction-btn" style="margin-bottom: 0;">
                                 ➕ Add
@@ -2060,28 +2002,28 @@
 
                         try {
                             addTransaction(symbol, parseFloat(quantity), parseFloat(price));
-                            
+
                             // Sofortiges visuelles Feedback
                             addButton.innerHTML = '✅ Added!';
                             addButton.style.background = 'linear-gradient(135deg, #00ff88, #00d4aa)';
                             addButton.disabled = true;
-                            
+
                             showNotification(`✅ ${quantity > 0 ? 'Buy' : 'Sell'} transaction added for ${symbol}!`, 'success');
-                            
+
                             // Clear the inputs
                             document.getElementById('rp-transaction-quantity').value = '';
                             document.getElementById('rp-transaction-price').value = '';
-                            
+
                             // Reset button after 2 seconds and refresh
                             setTimeout(() => {
                                 addButton.innerHTML = '➕ Add';
                                 addButton.style.background = 'linear-gradient(135deg, #00d4ff, #0096ff)';
                                 addButton.disabled = false;
-                                
+
                                 // Refresh the analysis tab
                                 loadCoinData(symbol);
                             }, 2000);
-                            
+
                         } catch (error) {
                             console.error('Error adding transaction:', error);
                             showNotification('❌ Error adding transaction', 'error');
@@ -2092,7 +2034,7 @@
                 // Also add Enter key support for inputs
                 const quantityInput = document.getElementById('rp-transaction-quantity');
                 const priceInput = document.getElementById('rp-transaction-price');
-                
+
                 if (quantityInput && priceInput) {
                     [quantityInput, priceInput].forEach(input => {
                         input.addEventListener('keypress', (e) => {
@@ -2116,8 +2058,262 @@
     };
 
     // ===========================
-    // Helper Functions
+    // Enhanced Event Listener Management
     // ===========================
+
+    const addEventListeners = () => {
+        console.log('🔧 Setting up event listeners...');
+
+        // Remove all existing onclick attributes first
+        document.querySelectorAll('[onclick]').forEach(element => {
+            console.log('🧹 Removing onclick from:', element.textContent.trim());
+            element.removeAttribute('onclick');
+        });
+
+        // Portfolio tab - Analyze buttons
+        document.querySelectorAll('[data-action="analyze"]').forEach(button => {
+            console.log('📊 Setting up analyze button for:', button.getAttribute('data-symbol'));
+            button.addEventListener('click', function() {
+                const symbol = this.getAttribute('data-symbol');
+                console.log('📊 Analyze button clicked for:', symbol);
+                currentCoin = symbol;
+                document.querySelector('[data-tab="analysis"]').click();
+            });
+        });
+
+        // Transaction tab - Delete buttons (NEW APPROACH)
+        document.querySelectorAll('.rp-delete-btn').forEach((button, index) => {
+            const symbol = button.getAttribute('data-symbol');
+            const txId = button.getAttribute('data-txid');
+            console.log(`🗑️ Setting up delete button ${index + 1} for: ${symbol} (${txId})`);
+
+            // Remove any existing listeners
+            button.replaceWith(button.cloneNode(true));
+            const newButton = document.querySelectorAll('.rp-delete-btn')[index];
+
+            newButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log(`🗑️ DELETE BUTTON CLICKED! Symbol: ${symbol}, TxId: ${txId}`);
+
+                // Immediate visual feedback
+                this.innerHTML = '⏳ Deleting...';
+                this.style.background = 'linear-gradient(135deg, #ffa500, #ff8c00)';
+                this.disabled = true;
+
+                // Perform deletion
+                try {
+                    console.log('🗑️ Attempting to delete transaction...');
+                    const success = deleteTransactionSimple(symbol, txId);
+
+                    if (success) {
+                        console.log('✅ Transaction deleted successfully!');
+                        showNotification(`✅ ${symbol} transaction deleted!`, 'success');
+
+                        // Remove row with animation
+                        const row = this.closest('tr');
+                        if (row) {
+                            row.style.background = 'rgba(255, 71, 87, 0.3)';
+                            row.style.transform = 'scale(0.95)';
+                            row.style.opacity = '0.5';
+
+                            setTimeout(() => {
+                                row.remove();
+                                updateTransactionsTab();
+                            }, 500);
+                        } else {
+                            updateTransactionsTab();
+                        }
+                    } else {
+                        console.error('❌ Failed to delete transaction');
+                        showNotification('❌ Failed to delete transaction', 'error');
+                        this.innerHTML = '🗑️ Delete';
+                        this.style.background = 'linear-gradient(135deg, #ff4757, #ff3742)';
+                        this.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('❌ Error during deletion:', error);
+                    showNotification('❌ Error deleting transaction', 'error');
+                    this.innerHTML = '🗑️ Delete';
+                    this.style.background = 'linear-gradient(135deg, #ff4757, #ff3742)';
+                    this.disabled = false;
+                }
+            });
+
+            console.log(`✅ Delete button ${index + 1} setup complete`);
+        });
+
+        // Export/Import buttons
+        const exportBtn = document.getElementById('rp-export-btn');
+        if (exportBtn) {
+            console.log('📤 Setting up export button');
+            exportBtn.removeAttribute('onclick');
+            exportBtn.addEventListener('click', () => {
+                console.log('📤 Export button clicked');
+                exportTransactions();
+            });
+        }
+
+        const importBtn = document.getElementById('rp-import-btn');
+        if (importBtn) {
+            console.log('📥 Setting up import button');
+            importBtn.removeAttribute('onclick');
+            importBtn.addEventListener('click', () => {
+                console.log('📥 Import button clicked');
+                showImportModal();
+            });
+        }
+
+        // Settings tab event listeners
+        const saveApiBtn = document.getElementById('rp-save-api-btn');
+        if (saveApiBtn) {
+            console.log('💾 Setting up save API button');
+            // Remove any existing onclick
+            saveApiBtn.removeAttribute('onclick');
+            saveApiBtn.addEventListener('click', () => {
+                console.log('💾 Save API button clicked');
+                saveApiKeyAction();
+            });
+        }
+
+        const clearPortfolioBtn = document.getElementById('rp-clear-portfolio-btn');
+        if (clearPortfolioBtn) {
+            console.log('🗑️ Setting up clear portfolio button');
+            // Remove any existing onclick
+            clearPortfolioBtn.removeAttribute('onclick');
+            clearPortfolioBtn.addEventListener('click', () => {
+                console.log('🗑️ Clear portfolio button clicked');
+                clearPortfolioAction();
+            });
+        }
+
+        // Additional settings buttons
+        const exportPortfolioBtn = document.getElementById('rp-export-portfolio-btn');
+        if (exportPortfolioBtn) {
+            console.log('📤 Setting up export portfolio button');
+            exportPortfolioBtn.removeAttribute('onclick');
+            exportPortfolioBtn.addEventListener('click', () => {
+                console.log('📤 Export portfolio button clicked');
+                exportTransactions();
+            });
+        }
+
+        const importPortfolioBtn = document.getElementById('rp-import-portfolio-btn');
+        if (importPortfolioBtn) {
+            console.log('📥 Setting up import portfolio button');
+            importPortfolioBtn.removeAttribute('onclick');
+            importPortfolioBtn.addEventListener('click', () => {
+                console.log('📥 Import portfolio button clicked');
+                showImportModal();
+            });
+        }
+
+        // Search tab buttons
+        document.querySelectorAll('[data-action="analyze-coin"]').forEach(button => {
+            console.log('🔍 Setting up search analyze button for:', button.getAttribute('data-symbol'));
+            button.addEventListener('click', function() {
+                const symbol = this.getAttribute('data-symbol');
+                console.log('🔍 Search analyze button clicked for:', symbol);
+                currentCoin = symbol;
+                document.querySelector('[data-tab="analysis"]').click();
+            });
+        });
+
+        console.log('✅ Event listeners setup complete');
+    };
+
+    // Simple and robust delete function
+    const deleteTransactionSimple = (symbol, txId) => {
+        console.log(`🗑️ deleteTransactionSimple called: ${symbol}, ${txId}`);
+        try {
+            const portfolio = getPortfolio();
+            console.log('📂 Current portfolio:', portfolio);
+
+            if (!portfolio[symbol] || !portfolio[symbol].transactions) {
+                console.error(`❌ No transactions found for ${symbol}`);
+                return false;
+            }
+
+            const beforeCount = portfolio[symbol].transactions.length;
+            console.log(`📊 Transactions before deletion: ${beforeCount}`);
+
+            const transactionIndex = portfolio[symbol].transactions.findIndex(tx => tx.id === txId);
+            console.log(`📍 Transaction index: ${transactionIndex}`);
+
+            if (transactionIndex === -1) {
+                console.error(`❌ Transaction ${txId} not found`);
+                return false;
+            }
+
+            // Remove the transaction
+            portfolio[symbol].transactions.splice(transactionIndex, 1);
+
+            // If no more transactions, remove the coin
+            if (portfolio[symbol].transactions.length === 0) {
+                console.log(`🗑️ No more transactions for ${symbol}, removing coin entry`);
+                delete portfolio[symbol];
+            }
+
+            // Save portfolio
+            savePortfolio(portfolio);
+
+            console.log(`✅ Transaction deleted successfully! Remaining: ${portfolio[symbol] ? portfolio[symbol].transactions.length : 0}`);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Error in deleteTransactionSimple:', error);
+            return false;
+        }
+    };
+
+    const saveApiKeyAction = () => {
+        const input = document.getElementById('rp-api-key');
+        if (!input) {
+            console.error('❌ API key input not found');
+            showNotification('❌ API key input not found', 'error');
+            return;
+        }
+
+        const key = input.value.trim();
+        if (!key) {
+            console.log('❌ Empty API key');
+            showNotification('❌ API key cannot be empty', 'error');
+            return;
+        }
+
+        console.log('💾 Saving API key...');
+        saveApiKey(key);
+        showNotification('✅ API key saved successfully', 'success');
+
+        setTimeout(() => {
+            document.querySelector('[data-tab="analysis"]').click();
+        }, 1000);
+    };
+
+    const clearPortfolioAction = () => {
+        console.log('🗑️ Clear portfolio action called');
+        showConfirmModal(
+            '🗑️ Clear All Data',
+            'This will permanently delete all your portfolio data and transactions. This action cannot be undone.',
+            () => {
+                console.log('🗑️ Clearing portfolio data confirmed...');
+                try {
+                    savePortfolio({});
+                    console.log('✅ Portfolio cleared successfully');
+                    showNotification('✅ Portfolio data cleared successfully', 'success');
+
+                    // Update UI if we're on portfolio tab
+                    const activeTab = document.querySelector('.rp-analyzer-tab.active');
+                    if (activeTab && activeTab.dataset.tab === 'portfolio') {
+                        setTimeout(() => updatePortfolioTab(), 500);
+                    }
+                } catch (error) {
+                    console.error('❌ Error clearing portfolio:', error);
+                    showNotification('❌ Error clearing portfolio', 'error');
+                }
+            }
+        );
+    };
 
     const getPredictionIcon = (trend) => {
         const icons = {
@@ -2179,15 +2375,22 @@
                     <p>${message}</p>
                 </div>
                 <div class="rp-modal-actions">
-                    <button class="rp-analyzer-button" style="background: #555;" onclick="document.getElementById('rp-confirm-modal').remove()">Cancel</button>
-                    <button class="rp-analyzer-button rp-delete" onclick="confirmAction()">Confirm</button>
+                    <button class="rp-analyzer-button" id="rp-modal-cancel" style="background: #555;">Cancel</button>
+                    <button class="rp-analyzer-button rp-delete" id="rp-modal-confirm">Confirm</button>
                 </div>
             </div>
         `;
 
         document.body.appendChild(modal);
 
-        window.confirmAction = () => {
+        // Add event listeners directly to the buttons
+        document.getElementById('rp-modal-cancel').addEventListener('click', () => {
+            console.log('❌ Modal cancelled');
+            modal.remove();
+        });
+
+        document.getElementById('rp-modal-confirm').addEventListener('click', () => {
+            console.log('✅ Modal confirmed');
             try {
                 onConfirm();
                 modal.remove();
@@ -2196,7 +2399,7 @@
                 showNotification('Error: ' + error.message, 'error');
                 modal.remove();
             }
-        };
+        });
     };
 
     // Export/Import Functions
@@ -2283,6 +2486,31 @@
 
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleString();
+    };
+
+    const formatDateShort = (dateString) => {
+        const date = new Date(dateString);
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+    };
+
+    const formatNumberCompact = (num) => {
+        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        if (num >= 1) return num.toFixed(2);
+        if (num >= 0.01) return num.toFixed(4);
+        return num.toFixed(6);
+    };
+
+    const formatPriceCompact = (price) => {
+        if (price >= 1) return price.toFixed(4);
+        if (price >= 0.01) return price.toFixed(5);
+        if (price >= 0.0001) return price.toFixed(6);
+        return price.toExponential(2);
     };
 
     const getCoinFromUrl = () => {
